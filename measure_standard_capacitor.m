@@ -22,9 +22,11 @@ function [Cstd, freq, Vc0Vex, Vr0Vex] = measure_standard_capacitor(fstart, fend,
 %               and some optionals which can be overridden by varargs:
 %                   Vex                     (see below)
 %                   Vstd_range              (see below)
+%                   RC_time                 (see below)
 % ---- optional parameters (will override duplicate entries in config) ----
 %    Vex        <excitation voltage to use; default USE PRESENT VALUE>
 %    Vstd_range <range of voltage to use for standard capacitor; default USE PRESENT VALUE>
+%    RC_time    <R*C time constant of bias tee; will wait between freqs; default = 0>
 %    log_scale  <BOOL toggle log scale for frequency sweep>
 %
 % 2018-04-24    - vast reduction in number of positional arguments; now
@@ -33,12 +35,16 @@ function [Cstd, freq, Vc0Vex, Vr0Vex] = measure_standard_capacitor(fstart, fend,
 %               - added optional arguments for basic execution options with
 %                 ability to override options in config structure by
 %                 choosing name-value pair as optional vararg to function
+% 2018-07-06    - added RC_time optional parameter which will wait for
+%                 specified time after changing frequency to allow lock-in
+%                 to settle by bias tee R*C time constant (default zero)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % parameters that change
 default_log_scale   = false; % toggle log x-scale and log spacing of freq points
-% time_constant_mult = 10; % how long to wait after setting frequency; EDIT: wait time is built-in to balance_capacitance_bridge()
 default_Rchip       = []; % throw error if Rchip is not specified either in config or as optional argument
+default_RC_time     = 0; % R*C time of bias tee
+RC_time_mult        = 3; % how long to wait after changing frequency; time constant (t_c) wait time is built-in to balance_capacitance_bridge()
 
 % validate required config fields (some required by balance_capacitance_bridge)
 required_fields = {'time_constant_channel', 'frequency_channel'}; % Rchip handled separately
@@ -51,11 +57,17 @@ end
 % deal with optional arguments
 parser = inputParser;
 parser.KeepUnmatched = true; % other args ignored
+validScalarNonNeg = @(x) validateattributes(x, {'numeric'}, {'scalar', 'nonnegative'});
 validScalarPos = @(x) validateattributes(x, {'numeric'}, {'scalar', 'positive'});
 addParameter(parser, 'log_scale', default_log_scale);
 
+% reset defaults based on config entries
 if isfield(config, 'Rchip'); default_Rchip = config.Rchip; end
-addParameter(parser, 'Rchip', default_Rchip, validScalarPos); % override config.Rchip if given
+if isfield(config, 'RC_time'); default_RC_time = config.RC_time; end
+
+% parsed arguments override config fields
+addParameter(parser, 'Rchip', default_Rchip, validScalarPos); % can override
+addParameter(parser, 'RC_time', default_RC_time, validScalarNonNeg); % can override
 parse(parser, varargin{:});
 
 % validate on-chip resistance value provided
@@ -63,6 +75,7 @@ Rchip = parser.Results.Rchip;
 if isempty(Rchip)
     error('measure_standard_capacitor requires Rchip in supplied config or as optional argument');
 end
+RC_time = parser.Results.RC_time;
 
 % toggle frequency log scale
 log_scale = parser.Results.log_scale;
@@ -81,7 +94,10 @@ for n = 1:Npoints
     smset(config.frequency_channel, freq(n));
     time_constant = 3/freq(n);
     smset(config.time_constant_channel, time_constant); % SET time_constant based on freq
-%     pause(time_constant_mult*time_constant); % wait time is built-in to balance_capacitance_bridge()
+    if RC_time
+        disp('settling...');
+        pause(RC_time_mult*RC_time); % t_c wait time is built-in to balance_capacitance_bridge()
+    end
 
     [balance_matrix, Vc0Vex(n), Vr0Vex(n), Cex] = balance_capacitance_bridge(config, varargin{:});
     if n == 1

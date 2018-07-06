@@ -15,6 +15,8 @@ function field_sweep(fnum, froot, Bset, Bcol, config, varargin)
 %            - added optional arguments for basic execution options with
 %              ability to override options in config structure by
 %              choosing name-value pair as optional vararg to function
+% 2018-06-24 added sweep_direction logic to end recording as soon as T is
+%            beyond set point, regardless of sweep direction
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % parameters that change
@@ -107,6 +109,7 @@ end
 readB = cell2mat(smget(config.channels{Bcol}));
 B = readB;
 Binit = readB;
+sweep_direction = sign(Bset-Binit);
 
 if set_field
     % set field target
@@ -119,7 +122,7 @@ oblivious = true;
 ii = 0;
 start = clock;
 tic;
-while abs(B-Bset) > deltaBtolerance
+while abs(readB-Bset) > deltaBtolerance || (readB-Bset)*sweep_direction < 0
     % read field value
     readB = cell2mat(smget(config.channels{Bcol}));
 

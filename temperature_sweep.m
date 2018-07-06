@@ -1,4 +1,4 @@
-function temperature_sweep(fnum, froot, Tset, interval, maxruntime, data_fields, plot_fields, send_email_after)
+function temperature_sweep(fnum, froot, Tset, config, varargin)
 %% measure in BlueFors during warmup or cooldown; requires manual change in temperature
 % written by Sergio de la Barrera on 2017-01-16
 % modified on 2017-01-26
@@ -14,33 +14,57 @@ function temperature_sweep(fnum, froot, Tset, interval, maxruntime, data_fields,
 % - added graceful exit/close plot handling on 2017-03-22
 % - modified to handle both get_temperature_from_log used with BlueFors as well as GPIB temps from PPMS or MagLab on 2017-04-24
 % 2018-04-05 modified to skip 'n/a' channels (yields zero)
+%
+% 2018-06-23 re-written to use config input structure and key-value
+%            optional argument pairs
+% 2018-06-24 added sweep_direction logic to end recording as soon as T is
+%            beyond set point, regardless of sweep direction
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% DOES NOT SET TEMPERATURE; MANUALLY SET SYSTEM TO CONDENSE, WARM, OR COOL
 
 % parameters that change
-Tcol = 1;
-deltaTtolerance = 0.001; % absolute temp difference in Kelvin
-use_resistance = false;
-log_dir = 'C:\Users\Hunt Lab\Desktop\BlueFors\logs';
-play_sound = true;
-% MANUALLY SET SYSTEM TO CONDENSE!
-% WRITE DOWN FREQ & TERMINAL CONFIGURATION!
+deltaTtolerance          = 0.001; % absolute temp difference in Kelvin
+default_interval         = []; % measure as frequently as possible unless specified by user
+default_maxruntime       = inf; % only quit on reaching Tset unless a max timeout condition is given [hours]
+default_plot_fields      = {};
+default_quiet            = false; % block all text output (other than errors) if true
+default_play_sound       = false;
+default_send_email_after = {}; % do not send an email unless address(es) given by user
 
-% deal with optional email argument
-if nargin < 8
-    send_email_after = {};
-end
-
-% deal with temperature logging method
-if isa(data_fields.channels{1}, 'function_handle')
-    % for log filename
-    if use_resistance
-        log_value = 'R';
-    else
-        log_value = 'T';
+% validate required config fields
+required_fields = {'Tcol'};
+for field = required_fields
+    if ~isfield(config, field)
+        error('temperature_sweep requires <%s> in supplied config', char(field));
     end
-    log_date = datestr(clock, 'yy-mm-dd');
-    log_basename = sprintf('CH9 %s %s.log', log_value, log_date);
-    log_path = fullfile(log_dir, log_date, log_basename);
 end
+Tcol = config.Tcol;
+
+% deal with optional arguments
+parser = inputParser;
+parser.KeepUnmatched = true; % other args ignored
+validScalarNonNeg = @(x) validateattributes(x, {'numeric'}, {'scalar', 'nonnegative'});
+validScalarPos = @(x) validateattributes(x, {'numeric'}, {'scalar', 'positive'});
+
+% reset defaults based on config entries
+if isfield(config, 'interval'); default_interval = config.interval; end
+if isfield(config, 'plot_fields'); default_plot_fields = config.plot_fields; end
+
+% parsed arguments override config fields
+addParameter(parser, 'interval', default_interval, validScalarNonNeg); % can override
+addParameter(parser, 'maxruntime', default_maxruntime, validScalarPos);
+addParameter(parser, 'plot_fields', default_plot_fields, @iscell); % can override
+addParameter(parser, 'quiet', default_quiet);
+addParameter(parser, 'play_sound', default_play_sound);
+addParameter(parser, 'send_email_after', default_send_email_after, @iscell);
+
+parse(parser, varargin{:});
+interval                = parser.Results.interval;
+maxruntime              = parser.Results.maxruntime;
+plot_fields             = parser.Results.plot_fields;
+quiet                   = parser.Results.quiet;
+play_sound              = parser.Results.play_sound;
+send_email_after        = parser.Results.send_email_after;
 
 % choose subplot layout
 np = length(plot_fields) + 1;
@@ -58,12 +82,11 @@ switch np
 end
 
 % list of data columns
-columns = 1:length(data_fields.columns);
+columns = 1:length(config.columns);
 
 % generate data filename
 fname = sprintf('%03.f_%s.dat', fnum, froot);
 while exist(fname, 'file') == 2
-%     error('filename exists already');
     fnum = fnum + 1;
     disp(sprintf('*** %s exists already, trying %d', fname, fnum));
     fname = sprintf('%03.f_%s.dat', fnum, froot);
@@ -71,7 +94,7 @@ end
 
 % write header
 fid = fopen(fname, 'a');
-data_header = sprintf('\t%+12s', data_fields.columns{:});
+data_header = sprintf('\t%+12s', config.columns{:});
 fprintf(fid, '%-24s%s\n', '#Timestamp', data_header);
 
 % initialize email notifications
@@ -92,11 +115,12 @@ if ~isempty(send_email_after)
 end
 
 % get initial temperature
-if isa(data_fields.channels{Tcol}, 'function_handle')
-    T = data_fields.channels{Tcol}(log_path);
+if isa(config.channels{Tcol}, 'function_handle')
+    T = config.channels{Tcol}();
 else
-    T = cell2mat(smget(data_fields.channels{Tcol}));
+    T = cell2mat(smget(config.channels{Tcol}));
 end
+sweep_direction = sign(Tset-T);
 
 % begin data collection
 verb = 'complete';
@@ -106,29 +130,16 @@ status = '';
 start = clock;
 tic;
 try
-    while abs(T-Tset) > deltaTtolerance && etime(clock, start) < maxruntime*3600
-        if isa(data_fields.channels{Tcol}, 'function_handle')
-            % build log path, source for temperature data
-            log_date = datestr(clock, 'yy-mm-dd');
-            log_basename = sprintf('CH9 %s %s.log', log_value, log_date);
-            log_path = fullfile(log_dir, log_date, log_basename);
-            if exist(log_path, 'file') ~= 2
-                disp('temperature log file does not exist yet---is it close to midnight?\twill attempt to use previous temperature...');
-            else
-                [T, Tdate, Ttime] = get_temperature_from_log(log_path);
-            end
+    while (abs(T-Tset) > deltaTtolerance && etime(clock, start) < maxruntime*3600) || (T-Tset)*sweep_direction < 0
+        if isa(config.channels{Tcol}, 'function_handle')
+            [T, Tdate, Ttime] = config.channels{Tcol}();
             if ~strcmp(Ttime, last_Ttime)% && T ~= 0
-                % deal with T > 100 K (TOVER) in BlueFors with LakeShore 372
-                if T == 0 && ~use_resistance
-                    T = 100;
-                end
-
                 % since the lastest entry is indeed new, record the new data point
                 last_Ttime = Ttime;
                 record = true;
             end
         else
-            T = cell2mat(smget(data_fields.channels{Tcol}));
+            T = cell2mat(smget(config.channels{Tcol}));
             record = true;
         end
         if record
@@ -140,10 +151,18 @@ try
             
             % read other smget channels
             for col = columns(columns~=Tcol)
-                if strcmp(data_fields.channels{col}, 'n/a') % skip columns with channel name 'n/a'
-                    data(ii, col) = 0;
+                channel = config.channels{col};
+                if isa(channel, 'function_handle')
+                    data(ii, col) = channel(); % call user function instead of smget
+                elseif isnumeric(channel)
+                    data(ii, col) = channel; % must be scalar
+                    if ii == 1
+                        config.columns{col} = ['*', config.columns{col}];
+                    end               
+                elseif isempty(channel) || strcmp(channel, 'n/a')
+                    data(ii, col) = 0; % skip columns with empty channel name or 'n/a'
                 else
-                    data(ii, col) = cell2mat(smget(data_fields.channels{col}));
+                    data(ii, col) = cell2mat(smget(config.channels{col}));                    
                 end
             end
             
@@ -152,7 +171,9 @@ try
             data_str = sprintf('\t%12g', data_row{:});
             status = sprintf('%-24s%s\n', dt, data_str);
             fprintf(fid, status);
-            fprintf(status);
+            if ~quiet
+                fprintf(status);
+            end
 
             % plot
             if ~isempty(plot_fields)
@@ -168,15 +189,15 @@ try
                             ax(ll) = plot(data(:, Tcol), data(:, sf));
                             hold all;
                         end
-                        xlabel(data_fields.columns{Tcol});
-                        ylabel(data_fields.columns{plot_fields{kk}(1)});
+                        xlabel(config.columns{Tcol});
+                        ylabel(config.columns{plot_fields{kk}(1)});
                         hold off;
                     end
                     % create temperature plot
                     subplot(sp_grid{:}, kk+1);
                     ax(ll+1) = plot(data(:, Tcol), '-k');
                     xlabel('data points');
-                    ylabel(data_fields.columns{Tcol});
+                    ylabel(config.columns{Tcol});
                 else
                     % update existing plots with new data
                     ll = 0;
@@ -202,11 +223,14 @@ try
                 end
             end
         end
-        if interval-toc < 0
-            disp(sprintf('interval too short by %f s', interval-toc));
+        
+        if interval
+            if ~quiet && interval-toc < 0
+                disp(sprintf('interval too short by %f s', interval-toc));
+            end
+            pause(interval-toc);
+            tic;
         end
-        pause(interval-toc);
-        tic;
     end
 
     % reset

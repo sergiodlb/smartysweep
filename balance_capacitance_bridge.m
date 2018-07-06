@@ -37,6 +37,10 @@ function [balance_matrix, Vc0Vex, Vr0Vex, Cex] = balance_capacitance_bridge(conf
 %               - added optional arguments for basic execution options with
 %                 ability to override options in config structure by
 %                 choosing name-value pair as optional vararg to function
+% 2018-07-05    - added Vstd_lockin_range which is separate from Vstd_range
+%                 allowing the latter to be less than the available lockin
+%                 output range (used during parameter search)
+%                 *final balance voltage may be <= Vstd_lockin_range
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % parameters that change
@@ -125,10 +129,11 @@ end
 
 if ~isempty(Vstd_range) % user supplied Vstd_range to SET
     % set standard voltage and range based on Vstd_range input
-    if ~(Vstd_range == 10^ceil(log10(Vstd_range)))
-        disp('Standard voltage range does not correspond to 10 mV, 100 mV, 1 V, or 10 V --> increasing to next highest range');
-        Vstd_range = 10^ceil(log10(Vstd_range));
-    end
+%     if ~(Vstd_range == 10^ceil(log10(Vstd_range)))
+%         disp('Standard voltage range does not correspond to 10 mV, 100 mV, 1 V, or 10 V --> increasing to next highest range');
+%         Vstd_range = 10^ceil(log10(Vstd_range));
+%     end
+    Vstd_lockin_range = 10^ceil(log10(Vstd_range));
     V_hi = max(sqrt(vr^2 + (vc + dvc)^2), sqrt(vc^2 + (vr + dvr)^2)) * Vstd_range; % highest standard voltage that will be applied
     if V_hi > 2;     % double check with user if any V_std > 2 V
         msg = sprintf('At least one standard voltage will be up to %.3g V --> do you want to continue?', V_hi);
@@ -143,11 +148,11 @@ if ~isempty(Vstd_range) % user supplied Vstd_range to SET
         end
     end
     
-    if Vstd_range > cell2mat(smget(config.Vstd_range_channel))
+    if Vstd_lockin_range > cell2mat(smget(config.Vstd_range_channel))
         smset(config.Vstd_amplitude_channel, vc);
-        smset(config.Vstd_range_channel, Vstd_range); % avoids jumping to 10 V, for example
+        smset(config.Vstd_range_channel, Vstd_lockin_range); % avoids jumping to 10 V, for example
     else
-        smset(config.Vstd_range_channel, Vstd_range); % can safely adjust range first
+        smset(config.Vstd_range_channel, Vstd_lockin_range); % can safely adjust range first
         smset(config.Vstd_amplitude_channel, vc); % in case Vc_new > Vc_old
     end
 else % read present value and use that instead
@@ -155,8 +160,8 @@ else % read present value and use that instead
 end
 
 % measure off-balance voltage components at three points (using fraction of range)
-vcs = [vc, vc, vc + dvc];
-vrs = [vr, vr + dvr, vr];
+vcs = [vc, vc, vc + dvc]*Vstd_range/Vstd_lockin_range;
+vrs = [vr, vr + dvr, vr]*Vstd_range/Vstd_lockin_range;
 L = zeros(2, 3, samples);
 for n = 1:3
     r = sqrt(vcs(n)^2 + vrs(n)^2);
@@ -204,9 +209,9 @@ Cex = Cstd * abs(Vc0 / Vex);
 Vc0Vex = Vc0/Vex;
 Vr0Vex = Vr0/Vex;
 
-% set excitation to balance point (using fraction of range)
-vr0 = Vr0/Vstd_range;
-vc0 = Vc0/Vstd_range;
+% set excitation to balance point (using fraction of lock-in output range)
+vr0 = Vr0/Vstd_lockin_range;
+vc0 = Vc0/Vstd_lockin_range;
 r = sqrt(vc0^2 + vr0^2);
 if r > 1
     cprintf('red', 'BALANCE POINT V_std LARGER THAN AVAILABLE RANGE--- INCREASE RANGE OR DROP Vex\n');

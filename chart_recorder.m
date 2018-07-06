@@ -1,24 +1,59 @@
-function chart_recorder(fnum, froot, interval, Npoints, data_fields, plot_fields)
+function chart_recorder(fnum, froot, config, varargin)
 %% start a simple chart recorder
-% modified from gate_sweep by Sergio de la Barrera on 2017-01-31
-% further modified by Sergio de la Barrera on 2017-03-03 to allow arbitrary data fields
-% uses log files to read probe termperature
-% - added graceful exit/close plot handling on 2017-03-22
-% - modified to handle both get_temperature_from_log used with BlueFors as well as GPIB temps from PPMS or MagLab on 2017-04-24
+% uses config input structure, a-la the capacitance scripts
+% written by Sergio de la Barrera on Jan 01, 2017
+%    config     structure containing:
+%                   channels = {...} (like data_fields)
+%                   columns = {...} 
+%               and some optionals which can be overridden by varargs:
+%                   interval                (see below)
+%                   plot_fields             (see below)
+% ---- optional parameters (will override duplicate entries in config) ----
+%    interval   <minimum time in seconds between data points; default = 0>
+%    Npoints    <finite number of data points to record; default = inf>
+%    plot_fields    <cell array of columns to live plot; default = {}>
+%    quiet      <BOOL to block text output to stdout; default = false>
+%
+% ---- change log
+% 2017-01-31 first version, modified from gate_sweep script
+% 2017-03-03 modified to allow arbitrary data fields
+% 2017-03-22 uses log files to read probe termperature
+% 			 added graceful exit/close plot handling
+% 2017-04-24 modified to handle both get_temperature_from_log used with
+%			 BlueFors as well as GPIB temps from PPMS or MagLab
+% 2018-06-26 heavily modified to match config input structure and key-value
+%			 optional parameters of capacitance scripts
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % parameters that change
-log_dir = 'C:\Users\Hunt Lab\Desktop\BlueFors\logs';
-log_value = 'T';% log temperature or therm resistance
-lw = 2;% plot line width
+default_interval        = []; % sweep as quickly as possible unless specified by user
+default_Npoints         = inf; % record forever, unless a finite number of points is given
+default_plot_fields     = {};
+default_quiet           = false; % block all text output (other than errors) if true
 
-% % deal with temperature logging method
-% if isa(data_fields.channels{1}, 'function_handle')
-%     % for log filename
-%     log_value = 'T';% log temperature or therm resistance
-%     log_date = datestr(clock, 'yy-mm-dd');
-%     log_basename = sprintf('CH9 %s %s.log', log_value, log_date);
-%     log_path = fullfile(log_dir, log_date, log_basename);
-% end
+% deal with optional arguments
+parser = inputParser;
+parser.KeepUnmatched = true; % other args ignored
+validScalarNonNeg = @(x) validateattributes(x, {'numeric'}, {'scalar', 'nonnegative'});
+validScalarPos = @(x) validateattributes(x, {'numeric'}, {'scalar', 'positive'});
+addOptional(parser, 'dry_run', false, @(x) any(validatestring(x, {'dry_run', 'dry-run'})));
+
+% reset defaults based on config entries
+if isfield(config, 'interval'); default_interval = config.interval; end
+if isfield(config, 'plot_fields'); default_plot_fields = config.plot_fields; end
+
+% parsed arguments override config fields
+addParameter(parser, 'interval', default_interval, validScalarNonNeg);
+addParameter(parser, 'Npoints', default_Npoints, validScalarPos); % could be improved with integer test
+addParameter(parser, 'plot_fields', default_plot_fields, @iscell); % can override
+addParameter(parser, 'quiet', default_quiet);
+
+parse(parser, varargin{:});
+interval                = parser.Results.interval;
+Npoints                 = parser.Results.Npoints;
+plot_fields             = parser.Results.plot_fields;
+quiet                   = parser.Results.quiet;
 
 % choose subplot layout
 np = length(plot_fields);
@@ -46,31 +81,26 @@ end
 
 % write header
 fid = fopen(fname, 'a');
-data_header = sprintf('\t%+12s', data_fields.columns{:});
+data_header = sprintf('\t%+12s', config.columns{:});
 fprintf(fid, '%-24s%s\n', '#Timestamp', data_header);
 
 % begin recording
 verb = 'complete';
 start = clock;
 tic;
-for ii = 1:Npoints
+ii = 0;
+while ii < Npoints
+	ii = ii + 1;
+
     % build cell array for logging
     dt = datestr(clock, 'yyyy-mm-ddTHH:MM:SS.FFF');
 
     % read smget values
-    for col = 1:length(data_fields.columns)
-        if isa(data_fields.channels{col}, 'function_handle')
-            % build log path, source for temperature data (has midnight handling; skips current read if log file does not exist)
-            log_date = datestr(clock, 'yy-mm-dd');
-            log_basename = sprintf('CH9 %s %s.log', log_value, log_date);
-            log_path = fullfile(log_dir, log_date, log_basename);
-            if exist(log_path, 'file') ~= 2
-                disp('temperature log file does not exist yet---is it close to midnight?\twill attempt to use previous temperature...');
-            else
-                data(ii, col) = data_fields.channels{col}(log_path);
-            end
+    for col = 1:length(config.columns)
+        if isa(config.channels{col}, 'function_handle') % could move this logic out of loop
+            data(ii, col) = config.channels{col}(); % call user function instead of smget
         else
-            data(ii, col) = cell2mat(smget(data_fields.channels{col}));
+            data(ii, col) = cell2mat(smget(config.channels{col}));
         end
     end
 
@@ -79,7 +109,9 @@ for ii = 1:Npoints
     data_str = sprintf('\t%12g', data_row{:});
     status = sprintf('%-24s%s\n', dt, data_str);
     fprintf(fid, status);
-    fprintf(status);
+    if ~quiet
+        fprintf(status);
+    end
 
     % plot
     if ~isempty(plot_fields)
@@ -96,7 +128,7 @@ for ii = 1:Npoints
                     hold all;
                 end
                 xlabel('data points');
-                ylabel(data_fields.columns{plot_fields{kk}(1)});
+                ylabel(config.columns{plot_fields{kk}(1)});
                 hold off;
             end
             grid on;
@@ -123,11 +155,13 @@ for ii = 1:Npoints
         end
     end
 
-    if interval-toc < 0
-        disp(sprintf('interval too short by %f s', interval-toc));
+    if interval
+        if ~quiet && interval-toc < 0
+            disp(sprintf('interval too short by %f s', interval-toc));
+        end
+        pause(interval-toc);
+        tic;
     end
-    pause(interval-toc);
-    tic;
 end
 
 % close file
