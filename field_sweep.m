@@ -122,7 +122,7 @@ oblivious = true;
 ii = 0;
 start = clock;
 tic;
-while abs(readB-Bset) > deltaBtolerance || (readB-Bset)*sweep_direction < 0
+while abs(readB-Bset) > deltaBtolerance && (readB-Bset)*sweep_direction < 0
     % read field value
     readB = cell2mat(smget(config.channels{Bcol}));
 

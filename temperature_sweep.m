@@ -130,7 +130,7 @@ status = '';
 start = clock;
 tic;
 try
-    while (abs(T-Tset) > deltaTtolerance && etime(clock, start) < maxruntime*3600) || (T-Tset)*sweep_direction < 0
+    while (abs(T-Tset) > deltaTtolerance && (T-Tset)*sweep_direction < 0) && etime(clock, start) < maxruntime*3600
         if isa(config.channels{Tcol}, 'function_handle')
             [T, Tdate, Ttime] = config.channels{Tcol}();
             if ~strcmp(Ttime, last_Ttime)% && T ~= 0
