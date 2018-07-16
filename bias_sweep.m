@@ -5,7 +5,7 @@ function bias_sweep(fnum, froot, Vstart, Vend, Npoints, Vcol, config, varargin)
 %    Vstart     <starting value for bias parameter; will fast ramp to this point>
 %    Vend       <final point for bias parameter>
 %    Npoints    <number of points to sweep, including start and end values>
-%    Vcol		<column # that will be swept by setting bias values>
+%  **Vcol		<column # that will be swept by setting bias values>
 %    config     structure containing:
 %                   channels = {...} (like data_fields)
 %                   columns = {...} 
@@ -228,11 +228,11 @@ for ii = 1:Npoints
                 for kk = 1:length(plot_fields)
                     for sf = plot_fields{kk}
                         ll = ll + 1;
-                        set(ax(ll), 'XData', data(1:ii, Vcol), 'YData', data(1:ii, sf));
+                        set(ax(ll), 'XData', data(1:ii, plot_xcol), 'YData', data(1:ii, sf));
                     end
                 end
                 % update swept parameter plot
-                set(ax(ll+1), 'YData', data(1:ii, Vcol));
+                set(ax(ll+1), 'YData', data(1:ii, plot_xcol));
                 drawnow;
             catch ploterr
                 % exit gracefully if plot closed

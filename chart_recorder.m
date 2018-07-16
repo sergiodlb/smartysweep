@@ -70,6 +70,20 @@ switch np
         sp_grid = {1, 1};
 end
 
+% define list of columns to read and fill manual numeric
+columns = 1:length(config.columns);
+n = 1;
+for col = columns
+    channel = config.channels{col};
+    if isnumeric(channel)
+        data(:, col) = channel; % must be scalar or array of appropriate length
+        config.columns{col} = ['*', config.columns{col}];
+    elseif ~isempty(config.channels{col}) && ~strcmp(config.channels{col}, 'n/a')
+        read_columns(n) = col;
+        n = n + 1;
+    end
+end
+
 % generate data filename
 fname = sprintf('%03.f_%s.dat', fnum, froot);
 while exist(fname, 'file') == 2
@@ -96,7 +110,7 @@ while ii < Npoints
     dt = datestr(clock, 'yyyy-mm-ddTHH:MM:SS.FFF');
 
     % read smget values
-    for col = 1:length(config.columns)
+    for col = read_columns
         if isa(config.channels{col}, 'function_handle') % could move this logic out of loop
             data(ii, col) = config.channels{col}(); % call user function instead of smget
         else
@@ -124,7 +138,7 @@ while ii < Npoints
                 subplot(sp_grid{:}, kk);
                 for sf = plot_fields{kk}
                     ll = ll + 1;
-                    ax(ll) = plot(data(:, sf), 'LineWidth', lw);
+                    ax(ll) = plot(data(:, sf));
                     hold all;
                 end
                 xlabel('data points');
