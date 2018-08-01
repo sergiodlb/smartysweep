@@ -28,7 +28,7 @@ function bias_sweep(fnum, froot, Vstart, Vend, Npoints, Vcol, config, varargin)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % parameters that change
-deltaVtolerance         = 0.0001; %[V]
+deltaVtolerance         = 0.001; %[V]
 default_Vfastrate       = 1; % sweep rate to starting point; approximately ~[V/s]
 default_interval        = []; % sweep as quickly as possible unless specified by user
 default_plot_fields     = {};
@@ -56,6 +56,7 @@ parser.KeepUnmatched = true; % other args ignored
 validScalarNonNeg = @(x) validateattributes(x, {'numeric'}, {'scalar', 'nonnegative'});
 validScalarPos = @(x) validateattributes(x, {'numeric'}, {'scalar', 'positive'});
 validLimitCondition = @(x) validateattributes(x, {'numeric'}, {'numel', 2});
+validFunction = @(x) validateattributes(x, {'function_handle'}, {});
 addOptional(parser, 'dry_run', false, @(x) any(validatestring(x, {'dry_run', 'dry-run'})));
 
 % reset defaults based on config entries
@@ -72,6 +73,8 @@ addParameter(parser, 'quiet', default_quiet);
 addParameter(parser, 'plot_fields', default_plot_fields, @iscell); % can override
 addParameter(parser, 'plot_xcol', default_plot_xcol, validScalarPos); % can override
 addParameter(parser, 'limit_condition', default_limit_condition, validLimitCondition); % can override
+addParameter(parser, 'call_before_measurement', false, validFunction);
+addParameter(parser, 'call_after_measurement', false, validFunction);
 
 parse(parser, varargin{:});
 Vfastrate               = parser.Results.Vfastrate;
@@ -80,6 +83,8 @@ plot_fields             = parser.Results.plot_fields;
 plot_xcol               = parser.Results.plot_xcol;
 quiet                   = parser.Results.quiet;
 limit_condition         = parser.Results.limit_condition;
+call_before_measurement = parser.Results.call_before_measurement;
+call_after_measurement  = parser.Results.call_after_measurement;
 
 % create list of voltage values
 Vlist = linspace(Vstart, Vend, Npoints);
@@ -158,12 +163,21 @@ data_header = sprintf('\t%+12s', config.columns{:});
 fprintf(fid, '%-24s%s\n', '#Timestamp', data_header);
 
 % begin sweeping
+h = []; % create empty variable for figure handles (for testing whether plot exists later)
 verb = 'complete';
 start = clock;
 tic;
 for ii = 1:Npoints
     % go to next voltage (instantaneous)
     smset(config.channels{Vcol}, Vlist(ii));
+    
+    % call specified function before measurement
+    if isa(call_before_measurement, 'function_handle')
+        out = call_before_measurement(config, 'return_values', true, varargin{:});
+        if isfield(out, 'columns')
+            data(ii, out.columns) = out.values;
+        end
+    end
     
     % build cell array for logging
     dt = datestr(clock, 'yyyy-mm-ddTHH:MM:SS.FFF');
@@ -176,7 +190,24 @@ for ii = 1:Npoints
             data(ii, col) = cell2mat(smget(config.channels{col}));
         end
     end
+    
+    % call specified function after measurement
+    if isa(call_after_measurement, 'function_handle')
+        out = call_after_measurement(config, 'return_values', true, varargin{:});
+        if isfield(out, 'columns')
+            data(ii, out.columns) = out.values;
+        end
+    end
 
+    % record
+    data_row = num2cell(data(ii, :));
+    data_str = sprintf('\t%12g', data_row{:});
+    status = sprintf('%-24s%s\n', dt, data_str);
+    fprintf(fid, status);
+    if ~quiet
+        fprintf(status);
+    end
+    
     % test limit condition, if supplied
     if ~isempty(limit_condition) && abs(data(ii, limit_condition(1))) > limit_condition(2)
         if ~quiet
@@ -189,20 +220,11 @@ for ii = 1:Npoints
         end
     end
 
-    % record
-    data_row = num2cell(data(ii, :));
-    data_str = sprintf('\t%12g', data_row{:});
-    status = sprintf('%-24s%s\n', dt, data_str);
-    fprintf(fid, status);
-    if ~quiet
-        fprintf(status);
-    end
-
     % plot
     if ~isempty(plot_fields)
-        if ii == 1
+        if isempty(h)
             % create figure first time
-            figure();
+            h = figure();
             ll = 0;
             for kk = 1:length(plot_fields)
                 % plot selected columns vs field
