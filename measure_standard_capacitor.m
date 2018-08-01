@@ -99,7 +99,10 @@ for n = 1:Npoints
         pause(RC_time_mult*RC_time); % t_c wait time is built-in to balance_capacitance_bridge()
     end
 
-    [balance_matrix, Vc0Vex(n), Vr0Vex(n), Cex] = balance_capacitance_bridge(config, varargin{:});
+%     [balance_matrix, Vc0Vex(n), Vr0Vex(n), Cex] = balance_capacitance_bridge(config, varargin{:});
+    balance_outputs = balance_capacitance_bridge(config, varargin{:});
+    Vc0Vex(n) = balance_outputs.Vc0Vex;
+    Vr0Vex(n) = balance_outputs.Vr0Vex;
     if n == 1
         % create figure first time
         figure();

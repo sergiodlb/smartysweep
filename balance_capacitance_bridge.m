@@ -1,4 +1,4 @@
-function [balance_matrix, Vc0Vex, Vr0Vex, Cex] = balance_capacitance_bridge(config, varargin)
+function out = balance_capacitance_bridge(config, varargin)
 % balances capacitance bridge for subsequent capacitance measurement
 % based on capbridgeBen written by Nick Goman and Ben Hunt
 % this function written by Sergio de la Barrera on Aug 29, 2017
@@ -14,6 +14,9 @@ function [balance_matrix, Vc0Vex, Vr0Vex, Cex] = balance_capacitance_bridge(conf
 %                   time_constant_channel   <sm channel of AC time constant>
 %                   Xcol       <column # of off-balance X measurement>
 %                   Ycol       <column # of off-balance Y measurement>
+%               additional fields required if called by measurement script:
+%                   Ccol       <column # to store capacitance measurement>
+%                   Lcol       <column # to store capacitance loss>
 %               and some optionals which can be overridden by varargs:
 %                   Vex                     (see below)
 %                   Vstd_range              (see below)
@@ -22,6 +25,15 @@ function [balance_matrix, Vc0Vex, Vr0Vex, Cex] = balance_capacitance_bridge(conf
 %    Vex        <excitation voltage to use; default USE PRESENT VALUE>
 %    Vstd_range <range of voltage to use for standard capacitor; default USE PRESENT VALUE>
 %    Cstd       <standard capacitance; default = 1>
+%    quiet      <BOOL to block text output to stdout; default = false>
+%    return_values  <toggles measurement mode (default = false), which will return column numbers and C, Closs values if called by another measurement function>
+%                   e.g.
+%                     if return_values
+%                         out.columns = [config.Ccol, config.Lcol]; % tell parent function where to put data values
+%                         out.values  = [Cex, Closs]; % return data values to be stored in the specified columns
+%                     else
+%                         out = [balance_matrix, Vc0Vex, Vr0Vex, Cex]; % simply return balance_matrix and other measured values
+%                     end
 %
 % 2017-09-08    - heavily revised to use actual voltage units for comparisons
 %                 between Vex and std voltages; user provides excitation
@@ -41,6 +53,21 @@ function [balance_matrix, Vc0Vex, Vr0Vex, Cex] = balance_capacitance_bridge(conf
 %                 allowing the latter to be less than the available lockin
 %                 output range (used during parameter search)
 %                 *final balance voltage may be <= Vstd_lockin_range
+% 2018-07-20    - major change to output format; if optional parameter
+%                 return_values == true, then returned object is a
+%                 structure with named fields:
+%                    out.columns = [config.Ccol, config.Lcol]
+%                    out.values  = [Cex, Closs]
+%                 otherwise output structure contains:
+%                    out.balance_matrix = balance_matrix; 
+%                    out.Vc0Vex         = Vc0Vex;
+%                    out.Vr0Vex         = Vr0Vex;
+%                    out.Cex            = Cex;
+%                    out.Closs          = Closs;
+%                    out.error_x        = error_x;
+%                    out.error_y        = error_y;
+% 2018-07-25    - added text output and associated 'quiet' option
+%                   
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % parameters that change
@@ -48,11 +75,16 @@ vc = 0.01;	% fraction of output voltage scale
 dvc = 0.49;	% large off-balance variation in fraction of output voltage scale
 vr = 0.01;	% fraction of output voltage scale
 dvr = 0.49;	% large off-balance variation in fraction of output voltage scale
+% vc = 0.01;	% fraction of output voltage scale
+% dvc = 0.94;	% large off-balance variation in fraction of output voltage scale
+% vr = 0.01;	% fraction of output voltage scale
+% dvr = 0.94;	% large off-balance variation in fraction of output voltage scale
 samples = 50; % for averaging
 time_constant_mult = 10; % how long to wait after changing voltage
 default_Vex         = []; % use present value if empty
 default_Vstd_range  = []; % use present value if empty
 default_Cstd        = 1; % if standard capacitance is unknown
+default_quiet       = false; % block all text output (other than errors) if true
 
 % validate required config fields
 required_fields = {'Vex_amplitude_channel',  'Vex_range_channel',  'time_constant_channel', ...
@@ -82,11 +114,25 @@ if isfield(config, 'Cstd'); default_Cstd = config.Cstd; end
 addParameter(parser, 'Vex', default_Vex, validScalarNonNeg); % can override
 addParameter(parser, 'Vstd_range', default_Vstd_range, validScalarPos); % can override
 addParameter(parser, 'Cstd', default_Cstd, validScalarPos); % can override
+addParameter(parser, 'quiet', default_quiet);
+addParameter(parser, 'return_values', false); % true if called by a measurement script (e.g. to perform rebalanced measurement)
 
 parse(parser, varargin{:});
-Vex = parser.Results.Vex;
-Vstd_range = parser.Results.Vstd_range;
-Cstd = parser.Results.Cstd;
+Vex         = parser.Results.Vex;
+Vstd_range  = parser.Results.Vstd_range;
+Cstd        = parser.Results.Cstd;
+quiet       = parser.Results.quiet;
+
+% check for additional arguments needed if returning data values
+return_values = parser.Results.return_values;
+if return_values
+    required_fields = {'Ccol', 'Lcol'};
+    for field = required_fields
+        if ~isfield(config, field)
+            error('balance_capacitance_bridge requires <%s> in supplied config in order to return data for measurement', char(field));
+        end
+    end
+end    
 
 if ~isempty(Vex) % user supplied Vex to SET
     % set excitation voltage and range based on Vex input
@@ -163,6 +209,7 @@ end
 vcs = [vc, vc, vc + dvc]*Vstd_range/Vstd_lockin_range;
 vrs = [vr, vr + dvr, vr]*Vstd_range/Vstd_lockin_range;
 L = zeros(2, 3, samples);
+if ~quiet; fprintf('balancing'); end;
 for n = 1:3
     r = sqrt(vcs(n)^2 + vrs(n)^2);
 %     phase = 180 - atand(vrs(n) / vcs(n));
@@ -180,8 +227,10 @@ for n = 1:3
 %         L(1, n, m) = cell2mat(smget(config.channels{Xcol}));
 %         L(2, n, m) = cell2mat(smget(config.channels{Ycol}));
     end
+    if ~quiet; fprintf('.'); end;
 end
 L = mean(L, 3); % average over samples
+if ~quiet; fprintf('\n'); end;
 
 % convert remaining fractional voltages to real voltage units
 Vr = vr*Vstd_range;
@@ -204,6 +253,7 @@ Vc0 = Vc + (P / Kc2) * ((Kr2 / Kr1) * L(1,1) - L(2,1));
 % Vc0 = vc0 * Vstd_range;
 % Vr0 = vr0 * Vstd_range;
 Cex = Cstd * abs(Vc0 / Vex);
+Closs = Cstd * abs(Vr0 / Vex);
 
 % output Vc0/Vex and Vr0/Vex (requires real voltages)
 Vc0Vex = Vc0/Vex;
@@ -214,14 +264,34 @@ vr0 = Vr0/Vstd_lockin_range;
 vc0 = Vc0/Vstd_lockin_range;
 r = sqrt(vc0^2 + vr0^2);
 if r > 1
-    cprintf('red', 'BALANCE POINT V_std LARGER THAN AVAILABLE RANGE--- INCREASE RANGE OR DROP Vex\n');
+    cprintf('red', 'BALANCE POINT Vstd LARGER THAN AVAILABLE RANGE--- INCREASE RANGE OR DROP Vex\n');
 end
 % phase = 180 - atand(vr0 / vc0);
 phase = 180 - atan2d(vr0, vc0); % 4-quadrant tangent function
 smset(config.Vstd_amplitude_channel, r);
 smset(config.Vstd_phase_channel, phase); 
 
+% this settle time allows a proper off-balance voltage measurement (ideally zero) following the balancing process
+pause(time_constant_mult*time_const);
+error_x = 1.005 * sqrt(2) * cell2mat(smget(config.channels{Xcol})); % it also allows determination of the error wrt true balance
+error_y = 1.005 * sqrt(2) * cell2mat(smget(config.channels{Ycol}));
+
 % output result (includes real voltages)
 balance_matrix = [Kc1, Kc2, Kr1, Kr2, Vc0, Vr0];
+
+% handle data output for rebalanced measurement versus direct call by user
+if return_values
+    out.columns = [config.Ccol, config.Lcol]; % tell parent function where to put data values
+    out.values  = [Cex, Closs]; % return data values to be stored in the specified columns
+    pause(time_constant_mult*time_const); % this settle time allows a proper off-balance voltage measurement (ideally zero) following the balancing process
+else % simply return balance_matrix and other measured values in a structure
+    out.balance_matrix = balance_matrix; 
+    out.Vc0Vex = Vc0Vex;
+    out.Vr0Vex = Vr0Vex;
+    out.Cex = Cex;
+    out.Closs = Closs;
+    out.error_x = error_x;
+    out.error_y = error_y;
 end
+return
 
