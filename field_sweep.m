@@ -17,6 +17,10 @@ function field_sweep(fnum, froot, Bset, Bcol, config, varargin)
 %              choosing name-value pair as optional vararg to function
 % 2018-06-24 added sweep_direction logic to end recording as soon as T is
 %            beyond set point, regardless of sweep direction
+% 2018-07-20    - added call_before_measurement and call_after_measurement
+%                 optional parameters that will execute a specified
+%                 function call and store any returned values in the data
+%                 columns specified in config + called function
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % parameters that change
@@ -34,6 +38,7 @@ parser = inputParser;
 parser.KeepUnmatched = true; % other args ignored
 validScalarNonNeg = @(x) validateattributes(x, {'numeric'}, {'scalar', 'nonnegative'});
 validScalarFrac = @(x) validateattributes(x, {'numeric'}, {'scalar', 'positive', '<=', 1.0});
+validFunction = @(x) validateattributes(x, {'function_handle'}, {});
 
 % reset defaults based on config entries
 if isfield(config, 'interval'); default_interval = config.interval; end
@@ -47,6 +52,8 @@ addParameter(parser, 'set_field', default_set_field);
 addParameter(parser, 'play_sound', default_play_sound);
 addParameter(parser, 'notify_when', default_notify_when, validScalarFrac);
 addParameter(parser, 'send_email_after', default_send_email_after, @iscell);
+addParameter(parser, 'call_before_measurement', false, validFunction);
+addParameter(parser, 'call_after_measurement', false, validFunction);
 
 parse(parser, varargin{:});
 interval                = parser.Results.interval;
@@ -56,6 +63,8 @@ set_field               = parser.Results.set_field;
 play_sound              = parser.Results.play_sound;
 notify_when             = parser.Results.notify_when;
 send_email_after        = parser.Results.send_email_after;
+call_before_measurement = parser.Results.call_before_measurement;
+call_after_measurement  = parser.Results.call_after_measurement;
 
 % choose subplot layout
 np = length(plot_fields) + 1;
@@ -139,6 +148,17 @@ while abs(readB-Bset) > deltaBtolerance && (readB-Bset)*sweep_direction < 0
             soundsc(y, Fs);
         end
 
+        % call specified function before measurement
+        if isa(call_before_measurement, 'function_handle')
+            out = call_before_measurement(config, 'return_values', true, varargin{:});
+            if isfield(out, 'columns')
+                data(ii, out.columns) = out.values;
+            end
+            % get field value again in case significant time has passed
+            readB = cell2mat(smget(config.channels{Bcol}));
+            B(ii) = readB;
+        end
+    
         % build cell array for logging
         dt = datestr(clock, 'yyyy-mm-ddTHH:MM:SS.FFF');
 
@@ -152,10 +172,18 @@ while abs(readB-Bset) > deltaBtolerance && (readB-Bset)*sweep_direction < 0
                 if ii == 1
                     config.columns{col} = ['*', config.columns{col}];
                 end               
-            elseif isempty(channel) || strcmp(channel, 'n/a')
-                data(ii, col) = 0; % skip columns with empty channel name or 'n/a'
+            elseif isempty(channel) || strcmp(channel, 'n/a') % do nothing, defaults entries to zero (possible conflict with call_before_measurement otherwise)
+%                 data(ii, col) = 0; % skip columns with empty channel name or 'n/a'
             else
                 data(ii, col) = cell2mat(smget(config.channels{col}));                    
+            end
+        end
+        
+        % call specified function after measurement
+        if isa(call_after_measurement, 'function_handle')
+            out = call_after_measurement(config, 'return_values', true, varargin{:});
+            if isfield(out, 'columns')
+                data(ii, out.columns) = out.values;
             end
         end
 

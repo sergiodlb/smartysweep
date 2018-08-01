@@ -23,6 +23,10 @@ function freq_sweep(fnum, froot, fstart, fend, Npoints, fcol, config, varargin)
 %
 % 2018-07-06  - updated to use config structure and key-val optional
 %               parameters
+% 2018-07-20    - added call_before_measurement and call_after_measurement
+%                 optional parameters that will execute a specified
+%                 function call and store any returned values in the data
+%                 columns specified in config + called function
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % parameters that change
@@ -45,9 +49,13 @@ parser = inputParser;
 parser.KeepUnmatched = true; % other args ignored
 validScalarNonNeg = @(x) validateattributes(x, {'numeric'}, {'scalar', 'nonnegative'});
 validScalarPos = @(x) validateattributes(x, {'numeric'}, {'scalar', 'positive'});
+validFunction = @(x) validateattributes(x, {'function_handle'}, {});
+
 addParameter(parser, 'log_scale', default_log_scale);
 addParameter(parser, 'tc_mult', default_tc_mult);
 addParameter(parser, 'quiet', default_quiet);
+addParameter(parser, 'call_before_measurement', false, validFunction);
+addParameter(parser, 'call_after_measurement', false, validFunction);
 
 % reset defaults based on config entries
 if isfield(config, 'interval'); default_interval = config.interval; end
@@ -63,6 +71,8 @@ interval                = parser.Results.interval;
 tc_mult                 = parser.Results.tc_mult;
 plot_fields             = parser.Results.plot_fields;
 quiet                   = parser.Results.quiet;
+call_before_measurement = parser.Results.call_before_measurement;
+call_after_measurement  = parser.Results.call_after_measurement;
 
 % choose subplot layout
 np = length(plot_fields);
@@ -132,6 +142,14 @@ for ii = 1:Npoints
     smset(config.channels{fcol}, freq(ii));
     smset(config.time_constant_channel, tc_mult/freq(ii)); % set time_constant based on freq
     pause(tc_mult/freq(ii)); % wait to settle
+    
+    % call specified function before measurement
+    if isa(call_before_measurement, 'function_handle')
+        out = call_before_measurement(config, 'return_values', true, varargin{:});
+        if isfield(out, 'columns')
+            data(ii, out.columns) = out.values;
+        end
+    end
 
     % build cell array for logging
     dt = datestr(clock, 'yyyy-mm-ddTHH:MM:SS.FFF');
@@ -142,6 +160,14 @@ for ii = 1:Npoints
             data(ii, col) = config.channels{col}(); % call user function instead of smget
         else
             data(ii, col) = cell2mat(smget(config.channels{col}));
+        end
+    end
+    
+    % call specified function after measurement
+    if isa(call_after_measurement, 'function_handle')
+        out = call_after_measurement(config, 'return_values', true, varargin{:});
+        if isfield(out, 'columns')
+            data(ii, out.columns) = out.values;
         end
     end
 
@@ -165,7 +191,7 @@ for ii = 1:Npoints
                 subplot(sp_grid{:}, kk);
                 for sf = plot_fields{kk}
                     ll = ll + 1;
-                    ax(ll) = plot(data(:, fcol), data(:, sf));
+                    ax(ll) = plot(data(1:ii, fcol), data(1:ii, sf));
                     hold all;
                 end
                 xlabel(config.columns{fcol});
@@ -182,7 +208,7 @@ for ii = 1:Npoints
                 for kk = 1:length(plot_fields)
                     for sf = plot_fields{kk}
                         ll = ll + 1;
-                        set(ax(ll), 'XData', data(:, fcol), 'YData', data(:, sf));
+                        set(ax(ll), 'XData', data(1:ii, fcol), 'YData', data(1:ii, sf));
                     end
                 end
                 drawnow;

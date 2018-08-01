@@ -23,6 +23,10 @@ function chart_recorder(fnum, froot, config, varargin)
 %			 BlueFors as well as GPIB temps from PPMS or MagLab
 % 2018-06-26 heavily modified to match config input structure and key-value
 %			 optional parameters of capacitance scripts
+% 2018-07-20    - added call_before_measurement and call_after_measurement
+%                 optional parameters that will execute a specified
+%                 function call and store any returned values in the data
+%                 columns specified in config + called function
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -37,6 +41,7 @@ parser = inputParser;
 parser.KeepUnmatched = true; % other args ignored
 validScalarNonNeg = @(x) validateattributes(x, {'numeric'}, {'scalar', 'nonnegative'});
 validScalarPos = @(x) validateattributes(x, {'numeric'}, {'scalar', 'positive'});
+validFunction = @(x) validateattributes(x, {'function_handle'}, {});
 addOptional(parser, 'dry_run', false, @(x) any(validatestring(x, {'dry_run', 'dry-run'})));
 
 % reset defaults based on config entries
@@ -48,12 +53,16 @@ addParameter(parser, 'interval', default_interval, validScalarNonNeg);
 addParameter(parser, 'Npoints', default_Npoints, validScalarPos); % could be improved with integer test
 addParameter(parser, 'plot_fields', default_plot_fields, @iscell); % can override
 addParameter(parser, 'quiet', default_quiet);
+addParameter(parser, 'call_before_measurement', false, validFunction);
+addParameter(parser, 'call_after_measurement', false, validFunction);
 
 parse(parser, varargin{:});
 interval                = parser.Results.interval;
 Npoints                 = parser.Results.Npoints;
 plot_fields             = parser.Results.plot_fields;
 quiet                   = parser.Results.quiet;
+call_before_measurement = parser.Results.call_before_measurement;
+call_after_measurement  = parser.Results.call_after_measurement;
 
 % choose subplot layout
 np = length(plot_fields);
@@ -106,6 +115,14 @@ ii = 0;
 while ii < Npoints
 	ii = ii + 1;
 
+    % call specified function before measurement
+    if isa(call_before_measurement, 'function_handle')
+        out = call_before_measurement(config, 'return_values', true, varargin{:});
+        if isfield(out, 'columns')
+            data(ii, out.columns) = out.values;
+        end
+    end
+    
     % build cell array for logging
     dt = datestr(clock, 'yyyy-mm-ddTHH:MM:SS.FFF');
 
@@ -115,6 +132,14 @@ while ii < Npoints
             data(ii, col) = config.channels{col}(); % call user function instead of smget
         else
             data(ii, col) = cell2mat(smget(config.channels{col}));
+        end
+    end
+    
+    % call specified function after measurement
+    if isa(call_after_measurement, 'function_handle')
+        out = call_after_measurement(config, 'return_values', true, varargin{:});
+        if isfield(out, 'columns')
+            data(ii, out.columns) = out.values;
         end
     end
 
