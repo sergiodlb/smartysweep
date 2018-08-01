@@ -19,6 +19,10 @@ function temperature_sweep(fnum, froot, Tset, config, varargin)
 %            optional argument pairs
 % 2018-06-24 added sweep_direction logic to end recording as soon as T is
 %            beyond set point, regardless of sweep direction
+% 2018-07-20    - added call_before_measurement and call_after_measurement
+%                 optional parameters that will execute a specified
+%                 function call and store any returned values in the data
+%                 columns specified in config + called function
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % DOES NOT SET TEMPERATURE; MANUALLY SET SYSTEM TO CONDENSE, WARM, OR COOL
 
@@ -45,6 +49,7 @@ parser = inputParser;
 parser.KeepUnmatched = true; % other args ignored
 validScalarNonNeg = @(x) validateattributes(x, {'numeric'}, {'scalar', 'nonnegative'});
 validScalarPos = @(x) validateattributes(x, {'numeric'}, {'scalar', 'positive'});
+validFunction = @(x) validateattributes(x, {'function_handle'}, {});
 
 % reset defaults based on config entries
 if isfield(config, 'interval'); default_interval = config.interval; end
@@ -57,6 +62,8 @@ addParameter(parser, 'plot_fields', default_plot_fields, @iscell); % can overrid
 addParameter(parser, 'quiet', default_quiet);
 addParameter(parser, 'play_sound', default_play_sound);
 addParameter(parser, 'send_email_after', default_send_email_after, @iscell);
+addParameter(parser, 'call_before_measurement', false, validFunction);
+addParameter(parser, 'call_after_measurement', false, validFunction);
 
 parse(parser, varargin{:});
 interval                = parser.Results.interval;
@@ -65,6 +72,8 @@ plot_fields             = parser.Results.plot_fields;
 quiet                   = parser.Results.quiet;
 play_sound              = parser.Results.play_sound;
 send_email_after        = parser.Results.send_email_after;
+call_before_measurement = parser.Results.call_before_measurement;
+call_after_measurement  = parser.Results.call_after_measurement;
 
 % choose subplot layout
 np = length(plot_fields) + 1;
@@ -145,6 +154,23 @@ try
         if record
             ii = ii + 1;
             
+            % call specified function before measurement
+            if isa(call_before_measurement, 'function_handle')
+                out = call_before_measurement(config, 'return_values', true, varargin{:});
+                if isfield(out, 'columns')
+                    data(ii, out.columns) = out.values;
+                end
+                % get temperature again in case significant time has passed
+                if isa(config.channels{Tcol}, 'function_handle')
+                    [T, Tdate, Ttime] = config.channels{Tcol}();
+                    if ~strcmp(Ttime, last_Ttime)
+                        last_Ttime = Ttime;
+                    end
+                else
+                    T = cell2mat(smget(config.channels{Tcol}));
+                end
+            end
+            
             % build cell array for logging
             dt = datestr(clock, 'yyyy-mm-ddTHH:MM:SS.FFF');
             data(ii, Tcol) = T;
@@ -154,15 +180,23 @@ try
                 channel = config.channels{col};
                 if isa(channel, 'function_handle')
                     data(ii, col) = channel(); % call user function instead of smget
-                elseif isnumeric(channel)
+                elseif isnumeric(channel) % TO-DO: this is outside of loop in other functions
                     data(ii, col) = channel; % must be scalar
                     if ii == 1
                         config.columns{col} = ['*', config.columns{col}];
-                    end               
-                elseif isempty(channel) || strcmp(channel, 'n/a')
-                    data(ii, col) = 0; % skip columns with empty channel name or 'n/a'
+                    end
+                elseif isempty(channel) || strcmp(channel, 'n/a') % do nothing, defaults entries to zero (possible conflict with call_before_measurement otherwise)
+%                     data(ii, col) = 0; % skip columns with empty channel name or 'n/a'
                 else
                     data(ii, col) = cell2mat(smget(config.channels{col}));                    
+                end
+            end
+            
+            % call specified function after measurement
+            if isa(call_after_measurement, 'function_handle')
+                out = call_after_measurement(config, 'return_values', true, varargin{:});
+                if isfield(out, 'columns')
+                    data(ii, out.columns) = out.values;
                 end
             end
             
