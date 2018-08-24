@@ -11,6 +11,7 @@ BOARD_NUM = 0;
 SR860_GPIB = [4,6];
 K2400_GPIB = [24];
 K2000_GPIB = 16;
+K6500_GPIB = 17;
 AMI430_COM = 'COM4';
 AMI430_BAUD = 115200;
 SeekatUNO_COM = 'COM5';
@@ -210,9 +211,9 @@ catch err
    fprintf(['*ERROR* problem with connecting to device\n' err.identifier ': ' err.message '\n'])
 end
 
-%% add Keithley DMM6500 digital multimeter (using Keithley 2002 driver; device in SCPI 200 emulator mode)
+%% add Keithley DMM6500 digital multimeter
 try
-    ind = smloadinst('Keithley2002', [], GPIB_BOARD, BOARD_NUM, K6500_GPIB);
+    ind = smloadinst('Keithley6500', [], GPIB_BOARD, BOARD_NUM, K6500_GPIB);
      
     % open GPIB communication
     smopen(ind) 
@@ -220,6 +221,7 @@ try
     
     % add channels
     smaddchannel('K6500', 'VOLT', 'K6500.V', [-Inf, Inf, Inf, 1]);
+    smaddchannel('K6500', 'CURRENT', 'K6500.I', [-Inf, Inf, Inf, 1]);
     
 catch err
    fprintf(['*ERROR* problem with connecting to device\n' err.identifier ': ' err.message '\n'])
