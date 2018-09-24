@@ -24,7 +24,7 @@ function field_sweep(fnum, froot, Bset, Bcol, config, varargin)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % parameters that change
-deltaBtolerance          = 0.0005; %[B]
+deltaBtolerance          = 0.001; %[B]
 default_interval         = []; % measure as frequently as possible unless specified by user
 default_plot_fields      = {};
 default_quiet            = false; % block all text output (other than errors) if true

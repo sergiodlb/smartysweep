@@ -139,7 +139,7 @@ status = '';
 start = clock;
 tic;
 try
-    while (abs(T-Tset) > deltaTtolerance && (T-Tset)*sweep_direction < 0) && etime(clock, start) < maxruntime*3600
+    while (abs(T-Tset) > deltaTtolerance && (T-Tset)*sweep_direction < 0) && etime(clock, start) < maxruntime*3600 && ~isnan(T)
         if isa(config.channels{Tcol}, 'function_handle')
             [T, Tdate, Ttime] = config.channels{Tcol}();
             if ~strcmp(Ttime, last_Ttime)% && T ~= 0
@@ -148,8 +148,16 @@ try
                 record = true;
             end
         else
-            T = cell2mat(smget(config.channels{Tcol}));
-            record = true;
+%             T = cell2mat(smget(config.channels{Tcol}));
+            try                
+                T = cell2mat(smget(config.channels{Tcol}));
+                record = true;
+            catch gpiberr
+                cprintf('red', 'Warning 1: error reading channel %s\n', config.channels{Tcol});
+                T = nan;
+                record = false;
+            end
+%             record = true;
         end
         if record
             ii = ii + 1;
@@ -167,13 +175,23 @@ try
                         last_Ttime = Ttime;
                     end
                 else
-                    T = cell2mat(smget(config.channels{Tcol}));
+%                     T = cell2mat(smget(config.channels{Tcol}));
+                    try                
+                        T = cell2mat(smget(config.channels{Tcol}));
+                    catch gpiberr
+                        cprintf('red', 'Warning 2: error reading channel %s\n', config.channels{Tcol});
+                        T = nan;
+                    end
                 end
             end
             
             % build cell array for logging
             dt = datestr(clock, 'yyyy-mm-ddTHH:MM:SS.FFF');
-            data(ii, Tcol) = T;
+            if ~isnan(T) && ~isempty(T) % still giving errors?
+                data(ii, Tcol) = T;
+            else % assign nan if empty due to GPIB error
+                data(ii, Tcol) = nan;
+            end
             
             % read other smget channels
             for col = columns(columns~=Tcol)
@@ -188,7 +206,13 @@ try
                 elseif isempty(channel) || strcmp(channel, 'n/a') % do nothing, defaults entries to zero (possible conflict with call_before_measurement otherwise)
 %                     data(ii, col) = 0; % skip columns with empty channel name or 'n/a'
                 else
-                    data(ii, col) = cell2mat(smget(config.channels{col}));                    
+%                     data(ii, col) = cell2mat(smget(config.channels{col}));
+                    try                
+                        data(ii, col) = cell2mat(smget(config.channels{col}));
+                    catch gpiberr
+                        cprintf('red', 'Warning 3: error reading channel %s\n', config.channels{col});
+                        data(ii, col) = nan;
+                    end
                 end
             end
             
@@ -268,16 +292,19 @@ try
     end
 
     % reset
-    message = sprintf('*** %s\tR-T measurement %s\n%s', datestr(clock, 'mmm dd HH:MMPM'), verb, status);
-    subject = sprintf('BlueFors data collection %s, T = %g', verb, T);
+    message = sprintf('*** %s\ttemperature sweep %s\n%s', datestr(clock, 'mmm dd HH:MMPM'), verb, status);
+    subject = sprintf('data collection %s, T = %g', verb, T);
     disp(message);
 catch err
-    try
-        message = sprintf('*** error has occurred\n%s\n%s\n%s', err.identifier, err.message, status);
-    catch err2
-        message = sprintf('*** error has occurred\n%s\n%s\n%s', err.identifier, err.message);
-    end
-    subject = sprintf('BlueFors measurement error has occurred');
+%     try
+%         message = sprintf('*** error has occurred\n%s\n%s\n%s', err.identifier, err.message, status);
+%     catch err2
+%         message = sprintf('*** error has occurred\n%s\n%s\n%s', err.identifier, err.message);
+%     end
+    message = sprintf('*** error has occurred\n%s\n%s\n%s', err.identifier, err.message);
+    err.stack
+    T
+    subject = sprintf('measurement error has occurred');
     disp(message);
 end
 
