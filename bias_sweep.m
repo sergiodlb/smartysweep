@@ -28,13 +28,14 @@ function bias_sweep(fnum, froot, Vstart, Vend, Npoints, Vcol, config, varargin)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % parameters that change
-deltaVtolerance         = 0.001; %[V]
+deltaVtolerance         = 0.002; %[V]
 default_Vfastrate       = 1; % sweep rate to starting point; approximately ~[V/s]
 default_interval        = []; % sweep as quickly as possible unless specified by user
 default_plot_fields     = {};
 default_plot_xcol       = Vcol;
 default_quiet           = false; % block all text output (other than errors) if true
 default_limit_condition = [];
+default_samples         = 1; % for averaging
 Vrange_channel_suffix   = 'range'; % e.g. "range" in "K2400.range"
 
 % validate input parameters
@@ -73,6 +74,7 @@ addParameter(parser, 'quiet', default_quiet);
 addParameter(parser, 'plot_fields', default_plot_fields, @iscell); % can override
 addParameter(parser, 'plot_xcol', default_plot_xcol, validScalarPos); % can override
 addParameter(parser, 'limit_condition', default_limit_condition, validLimitCondition); % can override
+addParameter(parser, 'samples', default_samples, validScalarNonNeg);
 addParameter(parser, 'call_before_measurement', false, validFunction);
 addParameter(parser, 'call_after_measurement', false, validFunction);
 
@@ -83,6 +85,7 @@ plot_fields             = parser.Results.plot_fields;
 plot_xcol               = parser.Results.plot_xcol;
 quiet                   = parser.Results.quiet;
 limit_condition         = parser.Results.limit_condition;
+samples                 = parser.Results.samples;
 call_before_measurement = parser.Results.call_before_measurement;
 call_after_measurement  = parser.Results.call_after_measurement;
 
@@ -133,6 +136,7 @@ end
 % pre-allocate data array
 columns = 1:length(config.columns);
 data = zeros(Npoints, length(columns));
+data_read = zeros(samples, length(columns));
 data(:, Vcol) = Vlist; % skip reading sweep parameter; write set values to save precious time
 
 % define list of columns to read and fill manual numeric
@@ -169,7 +173,8 @@ start = clock;
 tic;
 for ii = 1:Npoints
     % go to next voltage (instantaneous)
-    smset(config.channels{Vcol}, Vlist(ii));
+%     smset(config.channels{Vcol}, Vlist(ii));
+    smset(config.channels{Vcol}, Vlist(ii), Vfastrate);
     
     % call specified function before measurement
     if isa(call_before_measurement, 'function_handle')
@@ -183,13 +188,39 @@ for ii = 1:Npoints
     dt = datestr(clock, 'yyyy-mm-ddTHH:MM:SS.FFF');
 
     % read smget values
-    for col = read_columns
-        if isa(config.channels{col}, 'function_handle') % could move this logic out of loop
-            data(ii, col) = config.channels{col}(); % call user function instead of smget
-        else
-            data(ii, col) = cell2mat(smget(config.channels{col}));
+    if samples > 1
+        for sample = 1:samples
+            for col = read_columns
+                if isa(config.channels{col}, 'function_handle') % could move this logic out of loop
+                    data_read(sample, col) = config.channels{col}(); % call user function instead of smget
+                else
+        %             data_read(sample, col) = cell2mat(smget(config.channels{col}));
+                    try                
+                        data_read(sample, col) = cell2mat(smget(config.channels{col}));
+                    catch gpiberr
+                        cprintf('red', 'Warning: error reading channel %s\n', config.channels{col});
+                        data_read(sample, col) = nan;
+                    end
+                end
+            end
+        end
+        data_read(1, :) = nanmean(data_read, 1); % ignore NaN entries
+    else
+        for col = read_columns
+            if isa(config.channels{col}, 'function_handle') % could move this logic out of loop
+                data_read(1, col) = config.channels{col}(); % call user function instead of smget
+            else
+    %             data_read(1, col) = cell2mat(smget(config.channels{col}));
+                try                
+                    data_read(1, col) = cell2mat(smget(config.channels{col}));
+                catch gpiberr
+                    cprintf('red', 'Warning: error reading channel %s\n', config.channels{col});
+                    data_read(1, col) = nan;
+                end
+            end
         end
     end
+    data(ii, read_columns) = data_read(1, read_columns);
     
     % call specified function after measurement
     if isa(call_after_measurement, 'function_handle')

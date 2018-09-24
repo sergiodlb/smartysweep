@@ -83,6 +83,7 @@ for GPIB = SR860_GPIB
         smaddchannel(name, 'THETA', [name, '.phase']);
         smaddchannel(name, 'FREQ', [name, '.freq']);
         smaddchannel(name, 'VREF', [name, '.V']);
+        smaddchannel(name, 'SOFF', [name, '.Vdc']);
         smaddchannel(name, 'SCAL', [name, '.sensitivity']);
         smaddchannel(name, 'TAU', [name, '.timeconstant']);
 
@@ -222,6 +223,32 @@ try
     % add channels
     smaddchannel('K6500', 'VOLT', 'K6500.V', [-Inf, Inf, Inf, 1]);
     smaddchannel('K6500', 'CURRENT', 'K6500.I', [-Inf, Inf, Inf, 1]);
+    
+catch err
+   fprintf(['*ERROR* problem with connecting to device\n' err.identifier ': ' err.message '\n'])
+end
+
+%% add LakeShore 372
+try
+    ind = smloadinst('LS372', [], GPIB_BOARD, BOARD_NUM, LS372_GPIB);
+     
+    % open GPIB communication
+    smopen(ind) 
+    smdata.inst(ind).name = 'LS372'; 
+    
+    % add channels
+    smaddchannel('LS372', 'T1', 'LS372.T1');
+    smaddchannel('LS372', 'T2', 'LS372.T2');
+    smaddchannel('LS372', 'T3', 'LS372.T3');
+    smaddchannel('LS372', 'T5', 'LS372.T5');
+    smaddchannel('LS372', 'T6', 'LS372.T6');
+    smaddchannel('LS372', 'T9', 'LS372.T'); % let's just call the probe channel 'T' for simplicity
+    smaddchannel('LS372', 'OUTMODE', 'LS372.outmode'); % set 1 for closed loop PID and 0 for OFF
+    smaddchannel('LS372', 'RANGE', 'LS372.range'); % heater range: 0 = off, 1 = 31.6 µA, 2 = 100 µA, 3 = 316 µA, 4 = 1.00 mA, 5 = 3.16 mA, 6 = 10.0 mA, 7 = 31.6 mA, 8 = 100 mA
+    smaddchannel('LS372', 'SETP', 'LS372.setpoint');
+    smaddchannel('LS372', 'RAMP', 'LS372.ramp'); % turn setpoint ramping ON/OFF: 1=ON, 0=OFF
+    smaddchannel('LS372', 'RAMPRATE', 'LS372.rate'); % set/get setpoint ramp rate
+    smaddchannel('LS372', 'AUTOSCAN', 'LS372.autoscan'); % turn autoscanning ON/OFF: 1=ON, 0=OFF
     
 catch err
    fprintf(['*ERROR* problem with connecting to device\n' err.identifier ': ' err.message '\n'])
