@@ -79,11 +79,12 @@ dvr = 0.49;	% large off-balance variation in fraction of output voltage scale
 % dvc = 0.94;	% large off-balance variation in fraction of output voltage scale
 % vr = 0.01;	% fraction of output voltage scale
 % dvr = 0.94;	% large off-balance variation in fraction of output voltage scale
-samples = 50; % for averaging
-time_constant_mult = 10; % how long to wait after changing voltage
+time_constant_mult  = 10; % how long to wait after changing voltage
 default_Vex         = []; % use present value if empty
 default_Vstd_range  = []; % use present value if empty
 default_Cstd        = 1; % if standard capacitance is unknown
+default_offbal_samples = 100; % for averaging (separate from sweep sampling)
+default_balance     = true; % wait for true balance at end
 default_quiet       = false; % block all text output (other than errors) if true
 
 % validate required config fields
@@ -114,6 +115,8 @@ if isfield(config, 'Cstd'); default_Cstd = config.Cstd; end
 addParameter(parser, 'Vex', default_Vex, validScalarNonNeg); % can override
 addParameter(parser, 'Vstd_range', default_Vstd_range, validScalarPos); % can override
 addParameter(parser, 'Cstd', default_Cstd, validScalarPos); % can override
+addParameter(parser, 'offbal_samples', default_offbal_samples, validScalarNonNeg);
+addParameter(parser, 'balance', default_balance);
 addParameter(parser, 'quiet', default_quiet);
 addParameter(parser, 'return_values', false); % true if called by a measurement script (e.g. to perform rebalanced measurement)
 
@@ -121,6 +124,8 @@ parse(parser, varargin{:});
 Vex         = parser.Results.Vex;
 Vstd_range  = parser.Results.Vstd_range;
 Cstd        = parser.Results.Cstd;
+samples     = parser.Results.offbal_samples;
+balance     = parser.Results.balance;
 quiet       = parser.Results.quiet;
 
 % check for additional arguments needed if returning data values
@@ -230,7 +235,6 @@ for n = 1:3
     if ~quiet; fprintf('.'); end;
 end
 L = mean(L, 3); % average over samples
-if ~quiet; fprintf('\n'); end;
 
 % convert remaining fractional voltages to real voltage units
 Vr = vr*Vstd_range;
@@ -271,10 +275,14 @@ phase = 180 - atan2d(vr0, vc0); % 4-quadrant tangent function
 smset(config.Vstd_amplitude_channel, r);
 smset(config.Vstd_phase_channel, phase); 
 
-% this settle time allows a proper off-balance voltage measurement (ideally zero) following the balancing process
-pause(time_constant_mult*time_const);
-error_x = 1.005 * sqrt(2) * cell2mat(smget(config.channels{Xcol})); % it also allows determination of the error wrt true balance
-error_y = 1.005 * sqrt(2) * cell2mat(smget(config.channels{Ycol}));
+if balance
+    % this settle time allows a proper off-balance voltage measurement (ideally zero) following the balancing process
+    pause(time_constant_mult*time_const);
+    if ~quiet; fprintf('balanced'); end;
+    error_x = 1.005 * sqrt(2) * cell2mat(smget(config.channels{Xcol})); % it also allows determination of the error wrt true balance
+    error_y = 1.005 * sqrt(2) * cell2mat(smget(config.channels{Ycol}));
+end
+if ~quiet; fprintf('\n'); end;
 
 % output result (includes real voltages)
 balance_matrix = [Kc1, Kc2, Kr1, Kr2, Vc0, Vr0];
@@ -283,15 +291,16 @@ balance_matrix = [Kc1, Kc2, Kr1, Kr2, Vc0, Vr0];
 if return_values
     out.columns = [config.Ccol, config.Lcol]; % tell parent function where to put data values
     out.values  = [Cex, Closs]; % return data values to be stored in the specified columns
-    pause(time_constant_mult*time_const); % this settle time allows a proper off-balance voltage measurement (ideally zero) following the balancing process
 else % simply return balance_matrix and other measured values in a structure
     out.balance_matrix = balance_matrix; 
     out.Vc0Vex = Vc0Vex;
     out.Vr0Vex = Vr0Vex;
     out.Cex = Cex;
     out.Closs = Closs;
-    out.error_x = error_x;
-    out.error_y = error_y;
+    if balance % only report error if allowed to balance
+        out.error_x = error_x;
+        out.error_y = error_y;
+    end
 end
 return
 
