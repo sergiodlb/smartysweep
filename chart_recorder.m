@@ -170,7 +170,6 @@ while ii < Npoints
                 ylabel(config.columns{plot_fields{kk}(1)});
                 hold off;
             end
-            grid on;
         else
             % update existing plots with new data
             ll = 0;
