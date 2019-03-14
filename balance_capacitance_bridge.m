@@ -184,7 +184,17 @@ if ~isempty(Vstd_range) % user supplied Vstd_range to SET
 %         disp('Standard voltage range does not correspond to 10 mV, 100 mV, 1 V, or 10 V --> increasing to next highest range');
 %         Vstd_range = 10^ceil(log10(Vstd_range));
 %     end
-    Vstd_lockin_range = 10^ceil(log10(Vstd_range));
+    % set standard voltage lock-in range based on Vstd_range input
+    if Vstd_range <= 10e-3       % use 10 mV range
+        Vstd_lockin_range = 10e-3;
+    elseif Vstd_range <= 100e-3  % use 100 mV range
+        Vstd_lockin_range = 100e-3;
+    elseif Vstd_range <= 1 % use 1 V range
+        Vstd_lockin_range = 1;
+    else                % use 10 V range
+        Vstd_lockin_range = 10;
+    end
+%     Vstd_lockin_range = 10^ceil(log10(Vstd_range)); % this method incorrently sets range below 10 mV and above 10 V
     V_hi = max(sqrt(vr^2 + (vc + dvc)^2), sqrt(vc^2 + (vr + dvr)^2)) * Vstd_range; % highest standard voltage that will be applied
     if V_hi > 2;     % double check with user if any V_std > 2 V
         msg = sprintf('At least one standard voltage will be up to %.3g V --> do you want to continue?', V_hi);
@@ -256,8 +266,10 @@ Vc0 = Vc + (P / Kc2) * ((Kr2 / Kr1) * L(1,1) - L(2,1));
 % calculate device capacitance (requires real voltages)
 % Vc0 = vc0 * Vstd_range;
 % Vr0 = vr0 * Vstd_range;
-Cex = Cstd * abs(Vc0 / Vex);
-Closs = Cstd * abs(Vr0 / Vex);
+% Cex = Cstd * abs(Vc0 / Vex);
+% Closs = Cstd * abs(Vr0 / Vex);
+Cex = Cstd * Vc0 / Vex; % edit on 1/8/2019 for tuning antisymetric capacitance (can be negative)
+Closs = Cstd * Vr0 / Vex;
 
 % output Vc0/Vex and Vr0/Vex (requires real voltages)
 Vc0Vex = Vc0/Vex;
@@ -267,18 +279,28 @@ Vr0Vex = Vr0/Vex;
 vr0 = Vr0/Vstd_lockin_range;
 vc0 = Vc0/Vstd_lockin_range;
 r = sqrt(vc0^2 + vr0^2);
-if r > 1
+r_range = sqrt((Vc0/Vstd_range)^2 + (Vr0/Vstd_range)^2);
+if r > 1 || r_range > 1 % perhaps only the second condition matters
     cprintf('red', 'BALANCE POINT Vstd LARGER THAN AVAILABLE RANGE--- INCREASE RANGE OR DROP Vex\n');
+    in_range = false;
+else
+    in_range = true;
+    % phase = 180 - atand(vr0 / vc0);
+    phase = 180 - atan2d(vr0, vc0); % 4-quadrant tangent function
+    smset(config.Vstd_amplitude_channel, r); % go to balance point (if within acceptable Vstd_range)
+    smset(config.Vstd_phase_channel, phase); 
 end
-% phase = 180 - atand(vr0 / vc0);
-phase = 180 - atan2d(vr0, vc0); % 4-quadrant tangent function
-smset(config.Vstd_amplitude_channel, r);
-smset(config.Vstd_phase_channel, phase); 
 
 if balance
     % this settle time allows a proper off-balance voltage measurement (ideally zero) following the balancing process
     pause(time_constant_mult*time_const);
-    if ~quiet; fprintf('balanced'); end;
+    if ~quiet
+        if in_range
+            fprintf('balanced');
+        else
+            cprintf('unbalanced!');
+        end
+    end
     error_x = 1.005 * sqrt(2) * cell2mat(smget(config.channels{Xcol})); % it also allows determination of the error wrt true balance
     error_y = 1.005 * sqrt(2) * cell2mat(smget(config.channels{Ycol}));
 end
