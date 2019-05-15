@@ -73,14 +73,14 @@ balance_matrix = num2cell(balance_matrix);
 % compute all the necessaries
 Xoffbal = cell2mat(smget(config.channels{Xcol})); % new value will replace any prev measured one in live measurement
 Yoffbal = cell2mat(smget(config.channels{Ycol})); % new value will replace any prev measured one in live measurement
-L1prime = 1.005 * sqrt(2) * Xoffbal;
-L2prime = 1.005 * sqrt(2) * Yoffbal;
+L1prime = Xoffbal;
+L2prime = Yoffbal;
 Vr0prime = Vr0 + (Kc2 * L1prime - Kc1 * L2prime) / (Kc1 * Kr2 - Kr1 * Kc2);
 Vc0prime = Vc0 + (Kr1 * L2prime - Kr2 * L1prime) / (Kc1 * Kr2 - Kr1 * Kc2);
 
 % calculate capacitance
-Cex = Cstd * abs(Vc0prime / Vex);
-Closs = Cstd * abs(Vr0prime / Vex);
+Cex = Cstd * Vc0prime / Vex; % edit on 1/8/2019 for tuning antisymetric capacitance (can be negative)
+Closs = Cstd * Vr0prime / Vex;
 
 % handle data output for live measurement versus direct call by user
 if return_values
