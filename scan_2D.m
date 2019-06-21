@@ -22,8 +22,8 @@ function scan_2D(fnum, froot, p0, px, py, Nx, Ny, V1col, V2col, config, varargin
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % parameters that change
-Vfastrate = 1;
-settle_time = 9;
+Vfastrate = 0.2;
+settle_time = 3;
 
 % deal with optional arguments
 parser = inputParser;
@@ -45,6 +45,15 @@ V2_limits   = parser.Results.V2_limits;
 % determine start point of each fast sweep
 p0prime = [linspace(p0(1), py(1), Ny); linspace(p0(2), py(2), Ny)];
 
+% set up unequal hysteresis sweeps
+if hysteresis && length(Nx) > 1
+    Nx_back = Nx(2);
+    Nx      = Nx(1);
+    unequal_hysteresis = true;
+else
+    unequal_hysteresis = false;
+end
+
 % initiate 2D scan
 for ny = 1:Ny
     % determine end point of fast sweep
@@ -54,28 +63,41 @@ for ny = 1:Ny
     if raster && mod(ny-1, 2) % change sweep direction every other scan
         V1 = flip(V1);
         V2 = flip(V2);
+    elseif hysteresis
+        if unequal_hysteresis
+            V1_back = linspace(pxprime(1), p0prime(1,ny), Nx_back);
+            V2_back = linspace(pxprime(2), p0prime(2,ny), Nx_back);
+        else
+            V1_back = flip(V1);
+            V2_back = flip(V2);
+        end
     end
     
     % trim points outside of box limits
     box = V1>=V1_limits(1) & V1<=V1_limits(2) & V2>=V2_limits(1) & V2<=V2_limits(2);
     V1 = V1(box);
     V2 = V2(box);
+    if unequal_hysteresis
+        box = V1_back>=V1_limits(1) & V1_back<=V1_limits(2) & V2_back>=V2_limits(1) & V2_back<=V2_limits(2);
+        V1_back = V1_back(box);
+        V2_back = V2_back(box);
+    end       
     
     if isempty(V1) % skip sweeps that fall entirely outside box limits
         fprintf('skipping empty sweep %g/%g\n', ny, Ny);
     else        
         if dry_run
             % record sweep points for plotting
-            if ny == 1
-                V1_full_scan = V1;
-                V2_full_scan = V2;
-            else
+            if exist('V1_full_scan')
                 V1_full_scan = [V1_full_scan, V1];
                 V2_full_scan = [V2_full_scan, V2];
+            else % first time through, initialize
+                V1_full_scan = V1;
+                V2_full_scan = V2;
             end
             if hysteresis
-                V1_full_scan = [V1_full_scan, flip(V1)];
-                V2_full_scan = [V2_full_scan, flip(V2)];
+                V1_full_scan = [V1_full_scan, V1_back];
+                V2_full_scan = [V2_full_scan, V2_back];
             end
         else
             % fast ramp to start and cosweep along fast axis
@@ -83,14 +105,20 @@ for ny = 1:Ny
             smset({config.channels{V1col}, config.channels{V2col}}, [V1(1), V2(1)], Vfastrate);
             fprintf('settling...\n');
             pause(settle_time);
-            cosweep(fnum, froot, V1, V2, V1col, V2col, config, varargin{:});
+            cosweep_successful = cosweep(fnum, froot, V1, V2, V1col, V2col, config, varargin{:});
             if hysteresis
-                pause(settle_time);
+                if cosweep_successful
+                    pause(settle_time);
+                else % if, for example, a limit condition was reached in last cosweep, start new cosweep at present values
+                    [zero, limit_index] = min(abs(cell2mat(smget(config.channels{V1col}))-V1_back)); % finds closest element to present value
+                    V1_back = V1_back(limit_index:end); % truncate both vectors starting at present value
+                    V2_back = V2_back(limit_index:end);
+                end
                 fnum = fnum + 1;
-                cosweep(fnum, froot, flip(V1), flip(V2), V1col, V2col, config, varargin{:});
+                cosweep(fnum, froot, V1_back, V2_back, V1col, V2col, config, varargin{:});
             end
         end
-        fprintf('completed %g/%g sweeps\n', ny, Ny);
+        fprintf('%s\tcompleted %g/%g sweeps\n', datestr(clock, 'mmm dd HH:MMPM'), ny, Ny);
         fnum = fnum + 1;
     end
 end
