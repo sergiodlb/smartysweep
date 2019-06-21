@@ -21,12 +21,14 @@ function freq_sweep(fnum, froot, fstart, fend, Npoints, fcol, config, varargin)
 %                   e.g. {<column>, <numbers>, <to plot>, ..., [<can>, <put>, <in array>, <for same plot>]}
 %    quiet      <BOOL to block text output to stdout; default = false>
 %
-% 2018-07-06  - updated to use config structure and key-val optional
-%               parameters
+% 2018-07-06    - updated to use config structure and key-val optional
+%                 parameters
 % 2018-07-20    - added call_before_measurement and call_after_measurement
 %                 optional parameters that will execute a specified
 %                 function call and store any returned values in the data
 %                 columns specified in config + called function
+% 2019-04-24    - moved filename generation to generate_fname()
+%               - enabled separate data directory
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % parameters that change
@@ -93,12 +95,7 @@ end
 columns = 1:length(config.columns);
 
 % generate data filename
-fname = sprintf('%03.f_%s.dat', fnum, froot);
-while exist(fname, 'file') == 2
-    fnum = fnum + 1;
-    disp(sprintf('*** %s exists already, trying %d', fname, fnum));
-    fname = sprintf('%03.f_%s.dat', fnum, froot);
-end
+fname = generate_fname(fnum, froot, config, varargin{:});
 
 % write header
 fid = fopen(fname, 'a');

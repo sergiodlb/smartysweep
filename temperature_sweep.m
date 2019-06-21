@@ -23,6 +23,8 @@ function temperature_sweep(fnum, froot, Tset, config, varargin)
 %                 optional parameters that will execute a specified
 %                 function call and store any returned values in the data
 %                 columns specified in config + called function
+% 2019-06-21    - moved filename generation to generate_fname()
+%               - enabled separate data directory
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % DOES NOT SET TEMPERATURE; MANUALLY SET SYSTEM TO CONDENSE, WARM, OR COOL
 
@@ -94,12 +96,7 @@ end
 columns = 1:length(config.columns);
 
 % generate data filename
-fname = sprintf('%03.f_%s.dat', fnum, froot);
-while exist(fname, 'file') == 2
-    fnum = fnum + 1;
-    disp(sprintf('*** %s exists already, trying %d', fname, fnum));
-    fname = sprintf('%03.f_%s.dat', fnum, froot);
-end
+fname = generate_fname(fnum, froot, config, varargin{:});
 
 % write header
 fid = fopen(fname, 'a');
@@ -187,8 +184,8 @@ try
             
             % build cell array for logging
             dt = datestr(clock, 'yyyy-mm-ddTHH:MM:SS.FFF');
-            if ~isnan(T) && ~isempty(T) % still giving errors?
-                data(ii, Tcol) = T;
+            if ~isempty(T) && ~isnan(T) % still giving errors? --> isempty must go before short-circuit && because otherwise will get error: "Operands to the || and && operators must be convertible to logical scalar values." since isnan([]) --> []
+                data(ii, Tcol) = T; % the above still has some issue(s) --> gave array, T = [48, 57, ...], and this caused the same logical scalar value error
             else % assign nan if empty due to GPIB error
                 data(ii, Tcol) = nan;
             end

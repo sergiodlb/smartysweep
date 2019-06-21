@@ -1,4 +1,4 @@
-function cosweep(fnum, froot, V1, V2, V1col, V2col, config, varargin)
+function flag = cosweep(fnum, froot, V1, V2, V1col, V2col, config, varargin)
 % performs a simultaneous bias sweep of two parameters
 % based on capactiance_cosweep
 % this function written by Sergio de la Barrera on Aug 01, 2018
@@ -37,6 +37,8 @@ function cosweep(fnum, froot, V1, V2, V1col, V2col, config, varargin)
 %               - added optional arguments for basic execution options with
 %                 ability to override options in config structure by
 %                 choosing name-value pair as optional vararg to function
+% 2019-04-24    - moved filename generation to generate_fname()
+%               - enabled separate data directory
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % parameters that change
@@ -141,12 +143,7 @@ for col = normal_columns
 end
 
 % generate data filename
-fname = sprintf('%03.f_%s.dat', fnum, froot);
-while exist(fname, 'file') == 2
-    fnum = fnum + 1;
-    fprintf('*** %s exists already, trying %d\n', fname, fnum);
-    fname = sprintf('%03.f_%s.dat', fnum, froot);
-end
+fname = generate_fname(fnum, froot, config, varargin{:});
 
 % write header
 fid = fopen(fname, 'a');
@@ -156,6 +153,7 @@ fprintf(fid, '%-24s%s\n', '#Timestamp', data_header);
 % begin sweeping
 h = []; % create empty variable for figure handles (for testing whether plot exists later)
 verb = 'complete';
+flag = 1; % default exit flag
 start = clock;
 tic;
 for ii = 1:length(V1)
@@ -201,6 +199,7 @@ for ii = 1:length(V1)
         if ii < length(V1) && norm([V1(ii+1), V2(ii+1)]) < norm([V1(ii), V2(ii)]) % if next point is closer to zero
             continue % skip acquisition and go to next point
         else
+            flag = 0; % issue warning
             break % end execution
         end
     end

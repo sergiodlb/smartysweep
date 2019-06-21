@@ -27,6 +27,8 @@ function chart_recorder(fnum, froot, config, varargin)
 %                 optional parameters that will execute a specified
 %                 function call and store any returned values in the data
 %                 columns specified in config + called function
+% 2019-06-21    - moved filename generation to generate_fname()
+%               - enabled separate data directory
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -94,13 +96,7 @@ for col = columns
 end
 
 % generate data filename
-fname = sprintf('%03.f_%s.dat', fnum, froot);
-while exist(fname, 'file') == 2
-%     error('filename exists already');
-    fnum = fnum + 1;
-    disp(sprintf('*** %s exists already, trying %d', fname, fnum));
-    fname = sprintf('%03.f_%s.dat', fnum, froot);
-end
+fname = generate_fname(fnum, froot, config, varargin{:});
 
 % write header
 fid = fopen(fname, 'a');

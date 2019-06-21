@@ -25,6 +25,8 @@ function bias_sweep(fnum, froot, Vstart, Vend, Npoints, Vcol, config, varargin)
 %    limit_condition    <2-element array containing column # and limit value
 %                        at which to stop recording and proceed to next point or cancel sweep; default OFF>
 %
+% 2019-04-24    - moved filename generation to generate_fname()
+%               - enabled separate data directory
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % parameters that change
@@ -154,12 +156,7 @@ for col = normal_columns
 end
 
 % generate data filename
-fname = sprintf('%03.f_%s.dat', fnum, froot);
-while exist(fname, 'file') == 2
-    fnum = fnum + 1;
-    fprintf('*** %s exists already, trying %d\n', fname, fnum);
-    fname = sprintf('%03.f_%s.dat', fnum, froot);
-end
+fname = generate_fname(fnum, froot, config, varargin{:});
 
 % write header
 fid = fopen(fname, 'a');
