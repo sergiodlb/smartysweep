@@ -4,6 +4,8 @@ function [C, Closs] = offbal2cap_save(fnum, config, varargin)
 % parameters that may change
 time_fixwidth = 24; % must match format strings below
 val_fixwidth  = 12; % must match format strings below
+format = 'cap_%s'; % format of output filename (including original filename)
+default_data_directory = [];
 
 % validate required config fields
 required_fields = {'Ccol', 'Lcol'};
@@ -15,9 +17,19 @@ end
 Ccol = config.Ccol;
 Lcol = config.Lcol;
 
+% check for data directory
+parser = inputParser;
+parser.KeepUnmatched = true; % other args ignored
+if isfield(config, 'data_directory'); default_data_directory = config.data_directory; end % reset default based on config entry
+addParameter(parser, 'data_directory', default_data_directory); % parsed arguments override config fields
+parse(parser, varargin{:});
+data_directory = parser.Results.data_directory;
+
 % generate data filename
-[ignore, fname_org] = readcol(fnum, 1);
-fname = sprintf('cap_%s', fname_org);
+[~, fname_org] = readcol(fnum, 1, 'data_directory', data_directory);
+[path, name, ext] = fileparts(fname_org);
+nameext = [name, ext];
+fname = fullfile(path, sprintf(format, nameext));
 
 % write header
 fid = fopen(fname, 'w');
