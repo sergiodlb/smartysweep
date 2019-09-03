@@ -5,7 +5,7 @@ function Vbg_Vdc = E_n2volts(E, n, config, varargin)
 e           = 1.602e-19; %[C]
 ep0         = 8.854e-21; %[F/nm]
 default_ep  = 4;
-default_gate_mode = 'capacitance';
+default_gate_mode = 'bgtg';
 default_Vg  = 0;
 
 % deal with optional arguments
@@ -42,15 +42,16 @@ Cb  = ep*ep0/dbg;
 Ct  = ep*ep0/dtg;
 
 % transform to Vbg, Vdc
-if strcmp(gate_mode, 'capacitance')
+if strcmp(gate_mode, 'bgdc')
 %     Vg	= config.Vg;
-    Vbg = 0.5*((2*ep*ep0*E + e*n)/Cb + (2*ep*ep0*E - e*n)/Ct) + Vg;
-    Vdc = 0.5*((2*ep*ep0*E - e*n)/Ct) + Vg;
-else
-%     Vbg = +0.5*((2*ep*ep0*E + e*n)/Cb);                     % needs Vg correction
-%     Vdc = -0.5*((2*ep*ep0*E - e*n)/Ct); % Vdc --> Vtg       % needs Vg correction
+    Vbg = +0.5*((2*ep*ep0*E + e*n)/Cb + (2*ep*ep0*E - e*n)/Ct) + Vg;
+    Vdc = +0.5*((2*ep*ep0*E - e*n)/Ct) + Vg;
+elseif strcmp(gate_mode, 'tgdc') % Vbg means Vtg here
+    Vbg = -0.5*((2*ep*ep0*E + e*n)/Cb + (2*ep*ep0*E - e*n)/Ct) + Vg;
+    Vdc = -0.5*((2*ep*ep0*E + e*n)/Cb) + Vg;
+else  % Vdc means Vtg here
     Vbg = +0.5*((2*ep*ep0*E + e*n)/Cb) + Vg;
     Vdc = -0.5*((2*ep*ep0*E - e*n)/Ct) + Vg; % Vdc --> Vtg
 end
-Vbg_Vdc = [Vbg, Vdc]; % Vdc --> Vtg if transport mode
+Vbg_Vdc = [Vbg, Vdc]; % Vdc --> Vtg if 'bgtg' mode
 end

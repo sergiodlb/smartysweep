@@ -88,6 +88,8 @@ dvr = 0.49;	% large off-balance variation in fraction of output voltage scale
 time_constant_mult  = 10; % how long to wait after changing voltage
 default_Vex         = []; % use present value if empty
 default_Vstd_range  = []; % use present value if empty
+default_Vex_scale   = 1; % external gain (>1) or attenuation (<1)
+default_Vstd_scale  = 1; % external gain (>1) or attenuation (<1)
 default_Cstd        = 1; % if standard capacitance is unknown
 default_offbal_samples = 100; % for averaging (separate from sweep sampling)
 default_balance     = true; % wait for true balance at end
@@ -115,11 +117,15 @@ validScalarPos = @(x) validateattributes(x, {'numeric'}, {'scalar', 'positive'})
 % reset defaults based on config entries
 if isfield(config, 'Vex'); default_Vex = config.Vex; end
 if isfield(config, 'Vstd_range'); default_Vstd_range = config.Vstd_range; end
+if isfield(config, 'Vex_scale'); default_Vex_scale = config.Vex_scale; end
+if isfield(config, 'Vstd_scale'); default_Vstd_scale = config.Vstd_scale; end
 if isfield(config, 'Cstd'); default_Cstd = config.Cstd; end
 
 % parsed arguments override config fields
 addParameter(parser, 'Vex', default_Vex, validScalarNonNeg); % can override
 addParameter(parser, 'Vstd_range', default_Vstd_range, validScalarPos); % can override
+addParameter(parser, 'Vex_scale', default_Vex_scale, validScalarNonNeg); % can override
+addParameter(parser, 'Vstd_scale', default_Vstd_scale, validScalarNonNeg); % can override
 addParameter(parser, 'Cstd', default_Cstd, validScalarPos); % can override
 addParameter(parser, 'offbal_samples', default_offbal_samples, validScalarNonNeg);
 addParameter(parser, 'balance', default_balance);
@@ -129,6 +135,8 @@ addParameter(parser, 'return_values', false); % true if called by a measurement 
 parse(parser, varargin{:});
 Vex         = parser.Results.Vex;
 Vstd_range  = parser.Results.Vstd_range;
+Vex_scale   = parser.Results.Vex_scale;
+Vstd_scale  = parser.Results.Vstd_scale;
 Cstd        = parser.Results.Cstd;
 samples     = parser.Results.offbal_samples;
 balance     = parser.Results.balance;
@@ -146,7 +154,7 @@ if return_values
 end    
 
 if ~isempty(Vex) % user supplied Vex to SET   
-    if Vex > 2;     % double check with user if input Vex > 2 V
+    if Vex > 2     % double check with user if input Vex > 2 V
         msg = sprintf('Selected excitation voltage is %.3g V --> do you want to continue?', Vex);
         disp(msg);
         proceed = menu(msg, 'yes', 'no');
@@ -160,7 +168,7 @@ if ~isempty(Vex) % user supplied Vex to SET
     end
     
     % set Vex (rms voltage)
-    smset(config.Vex_amplitude_channel, Vex, 0.5);
+    smset(config.Vex_amplitude_channel, Vex/Vex_scale);%, 0.5);
 else % read present values and use those instead
     Vex = cell2mat(smget(config.Vex_amplitude_channel));
 end
@@ -191,7 +199,7 @@ if ~quiet; fprintf('balancing'); end;
 for n = 1:3
     R = sqrt(Vcs(n)^2 + Vrs(n)^2);
     phase = 180 - atan2d(Vrs(n), Vcs(n)); % 4-quadrant tangent function
-    smset(config.Vstd_amplitude_channel, R);
+    smset(config.Vstd_amplitude_channel, R/Vstd_scale);
     smset(config.Vstd_phase_channel, phase);
     pause(time_constant_mult*time_const);
     
@@ -234,7 +242,7 @@ if R > Vstd_range
 else
     in_range = true;
     phase = 180 - atan2d(Vr0, Vc0); % 4-quadrant tangent function
-    smset(config.Vstd_amplitude_channel, R); % go to balance point (if within acceptable Vstd_range)
+    smset(config.Vstd_amplitude_channel, R/Vstd_scale); % go to balance point (if within acceptable Vstd_range)
     smset(config.Vstd_phase_channel, phase);
 end
 
@@ -266,6 +274,8 @@ else % simply return balance_matrix and other measured values in a structure
     out.Vr0Vex = Vr0Vex;
     out.Cex = Cex;
     out.Closs = Closs;
+    out.R = R;
+    out.phase = phase;
     if balance % only report error if allowed to balance
         out.error_x = error_x;
         out.error_y = error_y;

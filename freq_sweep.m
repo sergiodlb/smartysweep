@@ -35,6 +35,7 @@ function freq_sweep(fnum, froot, fstart, fend, Npoints, fcol, config, varargin)
 default_log_scale       = true; % toggle log x-scale and log spacing of freq points
 default_interval        = []; % sweep as quickly as possible unless specified by user
 default_tc_mult         = 3; % prefactor to set time constant based on freq; tc = tc_mult/freq
+default_wait_for_lock   = false; % if given an instrument channel, will query and wait for confirmation of reference lock from lock-in amplifier
 default_plot_fields     = {};
 default_quiet           = false; % block all text output (other than errors) if true
 
@@ -60,10 +61,12 @@ addParameter(parser, 'call_before_measurement', false, validFunction);
 addParameter(parser, 'call_after_measurement', false, validFunction);
 
 % reset defaults based on config entries
+if isfield(config, 'wait_for_lock'); default_wait_for_lock = config.wait_for_lock; end
 if isfield(config, 'interval'); default_interval = config.interval; end
 if isfield(config, 'plot_fields'); default_plot_fields = config.plot_fields; end
 
 % parsed arguments override config fields
+addParameter(parser, 'wait_for_lock', default_wait_for_lock, @ischar);
 addParameter(parser, 'interval', default_interval, validScalarNonNeg);
 addParameter(parser, 'plot_fields', default_plot_fields, @iscell); % can override
 
@@ -71,6 +74,7 @@ parse(parser, varargin{:});
 log_scale               = parser.Results.log_scale;
 interval                = parser.Results.interval;
 tc_mult                 = parser.Results.tc_mult;
+wait_for_lock           = parser.Results.wait_for_lock;
 plot_fields             = parser.Results.plot_fields;
 quiet                   = parser.Results.quiet;
 call_before_measurement = parser.Results.call_before_measurement;
@@ -139,6 +143,12 @@ for ii = 1:Npoints
     smset(config.channels{fcol}, freq(ii));
     smset(config.time_constant_channel, tc_mult/freq(ii)); % set time_constant based on freq
     pause(tc_mult/freq(ii)); % wait to settle
+    if wait_for_lock % if given a channel for lock-in reference lock (could be any boolean query)
+        while ~cell2mat(smget(wait_for_lock)) % if unlocked, wait
+            fprintf('waiting for reference lock\n');
+            pause(tc_mult/freq(ii)); % wait to settle
+        end
+    end
     
     % call specified function before measurement
     if isa(call_before_measurement, 'function_handle')

@@ -34,6 +34,7 @@ function transistorON(config, varargin)
     end
     
     smset(Vdd_channel, Vdd, 1);
+    pause(0.1);
     smset(Vg_channel, Vg, 1);
     pause(0.1);
     fprintf('transistor ON\namplifier --> %.4g V\n', cell2mat(smget(Vd_channel)));

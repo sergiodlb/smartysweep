@@ -5,7 +5,7 @@ function E_n = volts2E_n(Vbg, Vdc, config, varargin)
 e           = 1.602e-19; %[C]
 ep0         = 8.854e-21; %[F/nm]
 default_ep  = 4;
-default_gate_mode = 'capacitance';
+default_gate_mode = 'bgtg';
 default_Vg  = 0;
 
 % deal with optional arguments
@@ -40,13 +40,14 @@ dbg = config.dbg;
 dtg = config.dtg;
 
 % transform to E, n
-if strcmp(gate_mode, 'capacitance')
+if strcmp(gate_mode, 'bgdc')
 %     Vg	= config.Vg;
     E = 0.5*((Vbg - Vdc)/dbg - (Vg - Vdc)/dtg);
     n = ep*ep0*((Vbg - Vdc)/dbg + (Vg - Vdc)/dtg)/e;
-else
-%     E = 0.5*(Vbg/dbg - Vdc/dtg);        % needs Vg correction
-%     n = ep*ep0*(Vbg/dbg + Vdc/dtg)/e;   % needs Vg correction
+elseif strcmp(gate_mode, 'tgdc') % Vbg means Vtg here
+    E = 0.5*((Vg - Vdc)/dbg - (Vbg - Vdc)/dtg);
+    n = ep*ep0*((Vg - Vdc)/dbg + (Vbg - Vdc)/dtg)/e;
+else % Vdc means Vtg here
     E = 0.5*((Vbg-Vg)/dbg - (Vdc-Vg)/dtg);
     n = ep*ep0*((Vbg-Vg)/dbg + (Vdc-Vg)/dtg)/e;
 end
