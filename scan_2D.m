@@ -29,10 +29,12 @@ settle_time = 3;
 parser = inputParser;
 parser.KeepUnmatched = true; % other args passed along
 validLimitCondition = @(x) validateattributes(x, {'numeric'}, {'numel', 2});
+validFunction = @(x) validateattributes(x, {'function_handle'}, {});
 addOptional(parser, 'dry_run', false, @(x) any(validatestring(x, {'dry_run'})));
 addParameter(parser, 'scan_style', 'typewriter', @(x) any(validatestring(x, {'typewriter', 'raster', 'hysteresis'})));
 addParameter(parser, 'V1_limits', [-inf,inf], validLimitCondition); % box limits on each separate voltage
 addParameter(parser, 'V2_limits', [-inf,inf], validLimitCondition); % (absolute limits beyond which the voltage will not go)
+addParameter(parser, 'mask_function', [], validFunction); % function which takes f(V1, V2, config) and returns BOOLEAN ARRAY indicating valid voltage values for sweeping
 
 parse(parser, varargin{:});
 dry_run     = parser.Results.dry_run; % will behave as true if dry_run is string
@@ -41,6 +43,7 @@ raster      = strcmp(parser.Results.scan_style, 'raster');
 hysteresis  = strcmp(parser.Results.scan_style, 'hysteresis');
 V1_limits   = parser.Results.V1_limits;
 V2_limits   = parser.Results.V2_limits;
+mask_function = parser.Results.mask_function;
 
 % determine start point of each fast sweep
 p0prime = [linspace(p0(1), py(1), Ny); linspace(p0(2), py(2), Ny)];
@@ -75,10 +78,19 @@ for ny = 1:Ny
     
     % trim points outside of box limits
     box = V1>=V1_limits(1) & V1<=V1_limits(2) & V2>=V2_limits(1) & V2<=V2_limits(2);
+    if ~isempty(mask_function)
+        mask = mask_function(V1, V2, config);
+        box = box & mask;
+    end
     V1 = V1(box);
     V2 = V2(box);
-    if unequal_hysteresis
+%     if unequal_hysteresis
+    if hysteresis
         box = V1_back>=V1_limits(1) & V1_back<=V1_limits(2) & V2_back>=V2_limits(1) & V2_back<=V2_limits(2);
+        if ~isempty(mask_function)
+            mask = mask_function(V1_back, V2_back, config);
+            box = box & mask;
+        end
         V1_back = V1_back(box);
         V2_back = V2_back(box);
     end       
@@ -126,7 +138,11 @@ end
 if dry_run
     % simply plot scan itinerary
     figure();
-    plot(V1_full_scan, V2_full_scan, '-x');
+    l = plot(V1_full_scan, V2_full_scan, '-x');
+    hold on;
+    plot(V1_full_scan(1), V2_full_scan(1), 'o', 'markerfacecolor', get(l,'color'), 'markeredgecolor', 'w');
+    plot(V1_full_scan(end), V2_full_scan(end), 'o', 'markerfacecolor', 'w', 'markeredgecolor', get(l,'color'));
+    hold off;
     xlabel(config.columns{V1col});
     ylabel(config.columns{V2col});
     fprintf('*** DRY-RUN ONLY\n');
