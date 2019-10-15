@@ -33,9 +33,11 @@ function transistorON(config, varargin)
         Vg  = parser.Results.Vg;
     end
     
-    smset(Vdd_channel, Vdd, 1);
-    pause(0.1);
+    % set Vg first to limit current through HEMT
     smset(Vg_channel, Vg, 1);
+    pause(0.1);
+    % then apply drain voltage
+    smset(Vdd_channel, Vdd, 1);
     pause(0.1);
     fprintf('transistor ON\namplifier --> %.4g V\n', cell2mat(smget(Vd_channel)));
 end
