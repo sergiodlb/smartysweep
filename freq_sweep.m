@@ -34,6 +34,7 @@ function freq_sweep(fnum, froot, fstart, fend, Npoints, fcol, config, varargin)
 % parameters that change
 default_log_scale       = true; % toggle log x-scale and log spacing of freq points
 default_interval        = []; % sweep as quickly as possible unless specified by user
+default_set_tc          = true; % choose whether or not to change tc based on frequency
 default_tc_mult         = 3; % prefactor to set time constant based on freq; tc = tc_mult/freq
 default_wait_for_lock   = false; % if given an instrument channel, will query and wait for confirmation of reference lock from lock-in amplifier
 default_plot_fields     = {};
@@ -55,6 +56,7 @@ validScalarPos = @(x) validateattributes(x, {'numeric'}, {'scalar', 'positive'})
 validFunction = @(x) validateattributes(x, {'function_handle'}, {});
 
 addParameter(parser, 'log_scale', default_log_scale);
+addParameter(parser, 'set_tc', default_set_tc);
 addParameter(parser, 'tc_mult', default_tc_mult);
 addParameter(parser, 'quiet', default_quiet);
 addParameter(parser, 'call_before_measurement', false, validFunction);
@@ -73,6 +75,7 @@ addParameter(parser, 'plot_fields', default_plot_fields, @iscell); % can overrid
 parse(parser, varargin{:});
 log_scale               = parser.Results.log_scale;
 interval                = parser.Results.interval;
+set_tc                  = parser.Results.set_tc;
 tc_mult                 = parser.Results.tc_mult;
 wait_for_lock           = parser.Results.wait_for_lock;
 plot_fields             = parser.Results.plot_fields;
@@ -141,7 +144,7 @@ tic;
 for ii = 1:Npoints
     % go to next frequency (instantaneous)
     smset(config.channels{fcol}, freq(ii));
-    smset(config.time_constant_channel, tc_mult/freq(ii)); % set time_constant based on freq
+    if set_tc; smset(config.time_constant_channel, tc_mult/freq(ii)); end % set time_constant based on freq
     pause(tc_mult/freq(ii)); % wait to settle
     if wait_for_lock % if given a channel for lock-in reference lock (could be any boolean query)
         while ~cell2mat(smget(wait_for_lock)) % if unlocked, wait
