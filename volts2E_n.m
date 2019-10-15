@@ -10,6 +10,7 @@ default_Vg  = 0;
 
 % deal with optional arguments
 parser = inputParser;
+parser.KeepUnmatched = true; % other args ignored
 validScalarPos = @(x) validateattributes(x, {'numeric'}, {'scalar', 'positive'});
 
 % reset defaults based on config entries

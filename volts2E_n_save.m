@@ -26,7 +26,7 @@ parse(parser, varargin{:});
 data_directory = parser.Results.data_directory;
 
 % generate data filename
-[~, fname_org] = readcol(fnum, 1, 'data_directory', data_directory);
+[~, fname_org] = readcol(fnum, 1, varargin{:});
 [path, name, ext] = fileparts(fname_org);
 nameext = [name, ext];
 fname = fullfile(path, sprintf(format, nameext));
@@ -38,7 +38,8 @@ fprintf(fid, '%-24s%s\n', '#Timestamp', data_header); % must match fixed width a
 fclose(fid);
 
 % convert gate voltages to E,n
-voltages = readcol(fnum, [V1col,V2col], 'data_directory', data_directory);
+% voltages = readcol(fnum, [V1col,V2col], 'data_directory', data_directory);
+voltages = readcol(fnum, [V1col,V2col], varargin{:});
 fields = volts2E_n(voltages(:,1), voltages(:,2), config, varargin{:});
 E = fields(:,1);
 n = fields(:,2);
