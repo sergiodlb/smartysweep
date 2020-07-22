@@ -77,14 +77,18 @@ function out = balance_capacitance_bridge(config, varargin)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % parameters that change
-vc = 0.01;	% fraction of output voltage scale
-dvc = 0.49;	% large off-balance variation in fraction of output voltage scale
-vr = 0.01;	% fraction of output voltage scale
-dvr = 0.49;	% large off-balance variation in fraction of output voltage scale
 % vc = 0.01;	% fraction of output voltage scale
-% dvc = 0.94;	% large off-balance variation in fraction of output voltage scale
+% dvc = 0.49;	% large off-balance variation in fraction of output voltage scale
 % vr = 0.01;	% fraction of output voltage scale
-% dvr = 0.94;	% large off-balance variation in fraction of output voltage scale
+% dvr = 0.49;	% large off-balance variation in fraction of output voltage scale
+% vc = 0.01;	% fraction of output voltage scale
+% dvc = 0.19;	% large off-balance variation in fraction of output voltage scale
+% vr = 0.01;	% fraction of output voltage scale
+% dvr = 0.19;	% large off-balance variation in fraction of output voltage scale
+vc = 0.01;	% fraction of output voltage scale
+dvc = 0.94;	% large off-balance variation in fraction of output voltage scale
+vr = 0.01;	% fraction of output voltage scale
+dvr = 0.94;	% large off-balance variation in fraction of output voltage scale
 time_constant_mult  = 10; % how long to wait after changing voltage
 default_Vex         = []; % use present value if empty
 default_Vstd_range  = []; % use present value if empty
@@ -94,6 +98,7 @@ default_Cstd        = 1; % if standard capacitance is unknown
 default_offbal_samples = 100; % for averaging (separate from sweep sampling)
 default_balance     = true; % wait for true balance at end
 default_quiet       = false; % block all text output (other than errors) if true
+default_plotting    = false; % plot real-time off-balance voltages while balancing
 
 % validate required config fields
 required_fields = {'Vex_amplitude_channel',  'time_constant_channel', ...
@@ -130,6 +135,7 @@ addParameter(parser, 'Cstd', default_Cstd, validScalarPos); % can override
 addParameter(parser, 'offbal_samples', default_offbal_samples, validScalarNonNeg);
 addParameter(parser, 'balance', default_balance);
 addParameter(parser, 'quiet', default_quiet);
+addParameter(parser, 'plot', default_plotting);
 addParameter(parser, 'return_values', false); % true if called by a measurement script (e.g. to perform rebalanced measurement)
 
 parse(parser, varargin{:});
@@ -141,6 +147,7 @@ Cstd        = parser.Results.Cstd;
 samples     = parser.Results.offbal_samples;
 balance     = parser.Results.balance;
 quiet       = parser.Results.quiet;
+plotting    = parser.Results.plot;
 
 % check for additional arguments needed if returning data values
 return_values = parser.Results.return_values;
@@ -175,7 +182,7 @@ end
 
 if ~isempty(Vstd_range) % user supplied Vstd_range to SET
     V_hi = max(sqrt(vr^2 + (vc + dvc)^2), sqrt(vc^2 + (vr + dvr)^2)) * Vstd_range; % highest standard voltage that will be applied
-    if V_hi > 2;     % double check with user if any V_std > 2 V
+    if V_hi > 2     % double check with user if any V_std > 2 V
         msg = sprintf('At least one standard voltage will be up to %.3g V --> do you want to continue?', V_hi);
         disp(msg);
         proceed = menu(msg, 'yes', 'no');
@@ -195,7 +202,7 @@ end
 Vcs = [vc, vc, vc + dvc]*Vstd_range; % rms voltages
 Vrs = [vr, vr + dvr, vr]*Vstd_range;
 L = zeros(2, 3, samples);
-if ~quiet; fprintf('balancing'); end;
+if ~quiet; fprintf('balancing'); end
 for n = 1:3
     R = sqrt(Vcs(n)^2 + Vrs(n)^2);
     phase = 180 - atan2d(Vrs(n), Vcs(n)); % 4-quadrant tangent function
@@ -204,12 +211,35 @@ for n = 1:3
     pause(time_constant_mult*time_const);
     
     for m = 1:samples
+%         while cell2mat(smget('Vd')) > 60e-3 || cell2mat(smget('Vd')) < 50e-3
+%             pause(0.1)
+%         end
         L(1, n, m) = cell2mat(smget(config.channels{Xcol})); % rms voltages
         L(2, n, m) = cell2mat(smget(config.channels{Ycol}));
+        if plotting
+            if n == 1 && m == 1
+                figure();
+                L1 = zeros(1,3*samples);
+                L2 = zeros(1,3*samples);
+                k = 1;
+                L1(k) = L(1,1,1);
+                L2(k) = L(2,1,1);
+                ax1 = plot(L1(1),'b'); hold all;
+                ax2 = plot(L2(1),'r');
+            else
+                k = k + 1;
+                L1(k) = L(1,n,m);
+                L2(k) = L(2,n,m);
+                set(ax1, 'YData', L1(1:k));
+                set(ax2, 'YData', L2(1:k));
+                drawnow;
+            end
+        end
     end
-    if ~quiet; fprintf('.'); end;
+    if ~quiet; fprintf('.'); end
 end
 L = mean(L, 3); % average over samples
+% if ~quiet; disp(L); end;
 
 % convert remaining fractional voltages to real voltage units
 Vr = vr*Vstd_range;
@@ -229,6 +259,11 @@ Vc0 = Vc + (P / Kc2) * ((Kr2 / Kr1) * L(1,1) - L(2,1));
 % calculate device capacitance (rms voltages)
 Cex = Cstd * Vc0 / Vex; % edit on 1/8/2019 for tuning antisymmetric capacitance (can be negative)
 Closs = Cstd * Vr0 / Vex;
+
+% % phase-shift corrected version:
+% eid = exp(1j * atan2(Vr0, Vc0))
+% Cex = Cstd * (Vc0 + Vr0*imag(eid)) / Vex;
+% Closs = Cstd * Vr0 * real(eid) / Vex;
 
 % output Vc0/Vex and Vr0/Vex
 Vc0Vex = Vc0/Vex;
@@ -259,7 +294,7 @@ if balance
     error_x = cell2mat(smget(config.channels{Xcol})); % it also allows determination of the error wrt true balance
     error_y = cell2mat(smget(config.channels{Ycol}));
 end
-if ~quiet; fprintf('\n'); end;
+if ~quiet; fprintf('\n'); end
 
 % output result (includes real voltages)
 balance_matrix = [Kc1, Kc2, Kr1, Kr2, Vc0, Vr0];
