@@ -170,8 +170,8 @@ start = clock;
 tic;
 for ii = 1:Npoints
     % go to next voltage (instantaneous)
-%     smset(config.channels{Vcol}, Vlist(ii));
-    smset(config.channels{Vcol}, Vlist(ii), Vfastrate);
+    smset(config.channels{Vcol}, Vlist(ii));
+%     smset(config.channels{Vcol}, Vlist(ii), Vfastrate);
     
     % call specified function before measurement
     if isa(call_before_measurement, 'function_handle')
@@ -271,6 +271,7 @@ for ii = 1:Npoints
             ax(ll+1) = plot(data(1:ii, plot_xcol), '-k');
             xlabel('data points');
             ylabel(config.columns{plot_xcol});
+            sgtitle(fname, 'interpreter', 'none');
         else
             % update existing plots with new data
             ll = 0;

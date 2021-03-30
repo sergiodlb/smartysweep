@@ -166,6 +166,7 @@ while ii < Npoints
                 ylabel(config.columns{plot_fields{kk}(1)});
                 hold off;
             end
+            sgtitle(fname, 'interpreter', 'none');
         else
             % update existing plots with new data
             ll = 0;

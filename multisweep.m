@@ -279,6 +279,7 @@ for ii = 1:Npoints
             ax(ll+1) = plot(data(1:ii, plot_xcol), '-k');
             xlabel('data points');
             ylabel(config.columns{plot_xcol});
+            sgtitle(fname, 'interpreter', 'none');
         else
             % update existing plots with new data
             ll = 0;

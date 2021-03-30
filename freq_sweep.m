@@ -210,6 +210,7 @@ for ii = 1:Npoints
                 if log_scale
                     set(gca, 'XScale', 'log');
                 end
+                sgtitle(fname, 'interpreter', 'none');
             end
         else
             % update existing plots with new data
