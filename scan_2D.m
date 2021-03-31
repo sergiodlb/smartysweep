@@ -22,7 +22,7 @@ function scan_2D(fnum, froot, p0, px, py, Nx, Ny, V1col, V2col, config, varargin
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % parameters that change
-Vfastrate = 0.2;
+default_fastramprate = 1; % sweep rate to starting point; approximately ~[V/s]
 settle_time = 3;
 
 % deal with optional arguments
@@ -30,7 +30,14 @@ parser = inputParser;
 parser.KeepUnmatched = true; % other args passed along
 validLimitCondition = @(x) validateattributes(x, {'numeric'}, {'numel', 2});
 validFunction = @(x) validateattributes(x, {'function_handle'}, {});
+validScalarPos = @(x) validateattributes(x, {'numeric'}, {'scalar', 'positive'});
+
+% reset defaults based on config entries
+if isfield(config, 'fastramprate'); default_fastramprate = config.fastramprate; end
+
+% parsed arguments override config fields
 addOptional(parser, 'dry_run', false, @(x) any(validatestring(x, {'dry_run'})));
+addParameter(parser, 'fastramprate', default_fastramprate, validScalarPos);
 addParameter(parser, 'scan_style', 'typewriter', @(x) any(validatestring(x, {'typewriter', 'raster', 'hysteresis'})));
 addParameter(parser, 'V1_limits', [-inf,inf], validLimitCondition); % box limits on each separate voltage
 addParameter(parser, 'V2_limits', [-inf,inf], validLimitCondition); % (absolute limits beyond which the voltage will not go)
@@ -39,6 +46,7 @@ addParameter(parser, 'mask_function', [], validFunction); % function which takes
 parse(parser, varargin{:});
 dry_run     = parser.Results.dry_run; % will behave as true if dry_run is string
 if dry_run; fprintf('DRY-RUN ONLY\n'); end
+fastramprate = parser.Results.fastramprate;
 raster      = strcmp(parser.Results.scan_style, 'raster');
 hysteresis  = strcmp(parser.Results.scan_style, 'hysteresis');
 V1_limits   = parser.Results.V1_limits;
@@ -114,7 +122,7 @@ for ny = 1:Ny
         else
             % fast ramp to start and cosweep along fast axis
             fprintf('ramping...');
-            smset({config.channels{V1col}, config.channels{V2col}}, [V1(1), V2(1)], Vfastrate);
+            smartyramp({config.channels{V1col}, config.channels{V2col}}, [V1(1), V2(1)], fastramprate);
             fprintf('settling...\n');
             pause(settle_time);
             cosweep_successful = cosweep(fnum, froot, V1, V2, V1col, V2col, config, varargin{:});

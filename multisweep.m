@@ -10,14 +10,14 @@ function multisweep(fnum, froot, Vstarts, Vends, Npoints, Vcols, config, varargi
 %                   channels = {...} (like data_fields)
 %                   columns = {...} 
 %               and some optionals which can be overridden by varargs:
-%                   Vfastrate               (see below)
+%                   fastramprate               (see below)
 %                   interval                (see below)
 %                   plot_fields             (see below)
 %                   plot_xcol               (see below)
 %                   limit_condition         (see below)
 % ---- optional parameters (will override duplicate entries in config) ----
 %    dry_run    (flag to simply diplay parameter itinerary without running anything)
-%    Vfastrate  <rate at which to fast sweep to starting point; default ~1 V/s>
+%    fastramprate  <rate at which to fast sweep to starting point; default ~1 V/s>
 %    interval   <minimum time in seconds between data points; default = 0>
 %    plot_fields    <cell array of columns to live plot; default = {}>
 %    plot_xcol      <column # to use as x-axis for plotting; default = Vcol>
@@ -31,7 +31,7 @@ function multisweep(fnum, froot, Vstarts, Vends, Npoints, Vcols, config, varargi
 
 % parameters that change
 % deltaVtolerance         = 0.002; %[V]
-% default_Vfastrate       = 1; % sweep rate to starting point; approximately ~[V/s]
+% default_fastramprate       = 1; % sweep rate to starting point; approximately ~[V/s]
 default_interval        = []; % sweep as quickly as possible unless specified by user
 default_plot_fields     = {};
 default_plot_xcol       = Vcols(1);
@@ -63,14 +63,14 @@ validFunction = @(x) validateattributes(x, {'function_handle'}, {});
 addOptional(parser, 'dry_run', false, @(x) any(validatestring(x, {'dry_run', 'dry-run'})));
 
 % reset defaults based on config entries
-% if isfield(config, 'Vfastrate'); default_Vfastrate = config.Vfastrate; end
+% if isfield(config, 'fastramprate'); default_fastramprate = config.fastramprate; end
 if isfield(config, 'interval'); default_interval = config.interval; end
 if isfield(config, 'plot_fields'); default_plot_fields = config.plot_fields; end
 if isfield(config, 'plot_xcol'); default_plot_xcol = config.plot_xcol; end
 if isfield(config, 'limit_condition'); default_limit_condition = config.limit_condition; end
 
 % parsed arguments override config fields
-% addParameter(parser, 'Vfastrate', default_Vfastrate, validScalarPos);
+% addParameter(parser, 'fastramprate', default_fastramprate, validScalarPos);
 addParameter(parser, 'interval', default_interval, validScalarNonNeg);
 addParameter(parser, 'quiet', default_quiet);
 addParameter(parser, 'plot_fields', default_plot_fields, @iscell); % can override
@@ -81,7 +81,7 @@ addParameter(parser, 'call_before_measurement', false, validFunction);
 addParameter(parser, 'call_after_measurement', false, validFunction);
 
 parse(parser, varargin{:});
-% Vfastrate               = parser.Results.Vfastrate;
+% fastramprate               = parser.Results.fastramprate;
 interval                = parser.Results.interval;
 plot_fields             = parser.Results.plot_fields;
 plot_xcol               = parser.Results.plot_xcol;
@@ -131,7 +131,7 @@ end
 % V = cell2mat(smget(config.channels{Vcol}));
 % if abs(V-Vstart) > deltaVtolerance
 %     fprintf('fast ramping %s to %g V\n', config.columns{Vcol}, Vstart);
-%     smset(config.channels{Vcol}, Vstart, Vfastrate);
+%     smset(config.channels{Vcol}, Vstart, fastramprate);
 %     while abs(V-Vstart) > deltaVtolerance
 %         fprintf('-');
 % %         pause(0.2); % doesn't do as intended anyway since above smset holds execution while ramping
