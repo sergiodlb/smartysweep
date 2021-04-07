@@ -19,7 +19,7 @@ if isfield(config, 'Vg'); Vg = config.Vg; else Vg = default_Vg; end
 
 % parsed arguments override config fields
 addParameter(parser, 'ep', default_ep, validScalarPos); % can override
-addParameter(parser, 'gate_mode', default_gate_mode, @(x) any(validatestring(x, {'capacitance','transport'}))); % can override
+addParameter(parser, 'gate_mode', default_gate_mode, @(x) any(validatestring(x, {'bgdc','tgdc','bgtg'}))); % can override
 parse(parser, varargin{:});
 gate_mode = parser.Results.gate_mode;
 
