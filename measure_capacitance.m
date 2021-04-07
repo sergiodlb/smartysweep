@@ -78,9 +78,14 @@ L2prime = Yoffbal;
 Vr0prime = Vr0 + (Kc2 * L1prime - Kc1 * L2prime) / (Kc1 * Kr2 - Kr1 * Kc2);
 Vc0prime = Vc0 + (Kr1 * L2prime - Kr2 * L1prime) / (Kc1 * Kr2 - Kr1 * Kc2);
 
-% calculate capacitance
-Cex = Cstd * Vc0prime / Vex; % edit on 1/8/2019 for tuning antisymetric capacitance (can be negative)
-Closs = Cstd * Vr0prime / Vex;
+% % calculate capacitance
+% Cex = Cstd * Vc0prime / Vex; % edit on 1/8/2019 for tuning antisymetric capacitance (can be negative)
+% Closs = Cstd * Vr0prime / Vex;
+
+% phase-shift corrected version:
+eid = exp(1j * atan2(Vr0prime, Vc0prime));
+Cex = Cstd * (Vc0prime + Vr0prime*imag(eid)) / Vex;
+Closs = Cstd * Vr0prime * real(eid) / Vex;
 
 % handle data output for live measurement versus direct call by user
 if return_values

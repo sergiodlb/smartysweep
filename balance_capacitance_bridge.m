@@ -81,14 +81,14 @@ function out = balance_capacitance_bridge(config, varargin)
 % dvc = 0.49;	% large off-balance variation in fraction of output voltage scale
 % vr = 0.01;	% fraction of output voltage scale
 % dvr = 0.49;	% large off-balance variation in fraction of output voltage scale
-% vc = 0.01;	% fraction of output voltage scale
-% dvc = 0.19;	% large off-balance variation in fraction of output voltage scale
-% vr = 0.01;	% fraction of output voltage scale
-% dvr = 0.19;	% large off-balance variation in fraction of output voltage scale
 vc = 0.01;	% fraction of output voltage scale
 dvc = 0.94;	% large off-balance variation in fraction of output voltage scale
 vr = 0.01;	% fraction of output voltage scale
 dvr = 0.94;	% large off-balance variation in fraction of output voltage scale
+
+% deal with ac sources with a minimum finite rms output
+% Vstd_min = 8e-3; % DS345
+
 time_constant_mult  = 10; % how long to wait after changing voltage
 default_Vex         = []; % use present value if empty
 default_Vstd_range  = []; % use present value if empty
@@ -159,6 +159,10 @@ if return_values
         end
     end
 end    
+
+% % deal with ac sources with a minimum finite rms output
+% vc = max(vc, Vstd_min*Vstd_scale/Vstd_range);
+% vr = max(vr, Vstd_min*Vstd_scale/Vstd_range);
 
 if ~isempty(Vex) % user supplied Vex to SET   
     if Vex > 2     % double check with user if input Vex > 2 V
@@ -256,14 +260,14 @@ P = (1 - (Kc1 * Kr2) / (Kr1 * Kc2))^(-1);
 Vr0 = Vr + (P / Kr1) * ((Kc1 / Kc2) * L(2,1) - L(1,1)); % all rms voltages
 Vc0 = Vc + (P / Kc2) * ((Kr2 / Kr1) * L(1,1) - L(2,1));
 
-% calculate device capacitance (rms voltages)
-Cex = Cstd * Vc0 / Vex; % edit on 1/8/2019 for tuning antisymmetric capacitance (can be negative)
-Closs = Cstd * Vr0 / Vex;
+% % calculate device capacitance (rms voltages)
+% Cex = Cstd * Vc0 / Vex; % edit on 1/8/2019 for tuning antisymmetric capacitance (can be negative)
+% Closs = Cstd * Vr0 / Vex;
 
-% % phase-shift corrected version:
-% eid = exp(1j * atan2(Vr0, Vc0))
-% Cex = Cstd * (Vc0 + Vr0*imag(eid)) / Vex;
-% Closs = Cstd * Vr0 * real(eid) / Vex;
+% phase-shift corrected version:
+eid = exp(1j * atan2(Vr0, Vc0));
+Cex = Cstd * (Vc0 + Vr0*imag(eid)) / Vex;
+Closs = Cstd * Vr0 * real(eid) / Vex;
 
 % output Vc0/Vex and Vr0/Vex
 Vc0Vex = Vc0/Vex;
