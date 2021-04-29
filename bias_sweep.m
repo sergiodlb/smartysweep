@@ -127,12 +127,12 @@ V = cell2mat(smget(config.channels{Vcol}));
 if abs(V-Vstart) > deltaVtolerance
     fprintf('fast ramping %s to %g V\n', config.columns{Vcol}, Vstart);
     smartyramp(config.channels{Vcol}, Vstart, fastramprate);
-    while abs(V-Vstart) > deltaVtolerance
-        fprintf('-');
-%         pause(0.2); % doesn't do as intended anyway since above smset holds execution while ramping
-        V = cell2mat(smget(config.channels{Vcol}));
-    end
-    fprintf('> %g V\n', V);
+%     while abs(V-Vstart) > deltaVtolerance
+%         fprintf('-');
+% %         pause(0.2); % doesn't do as intended anyway since above smset holds execution while ramping
+%         V = cell2mat(smget(config.channels{Vcol}));
+%     end
+%     fprintf('> %g V\n', V);
 end
 
 % pre-allocate data array
