@@ -33,7 +33,11 @@ for n = 1:length(values0)
 end
 
 if ~isempty(setpoints) && ~quiet
-    fprintf('Chan:\t%s\n', sprintf('%-12s', channels{:}));
+    if iscell(channels)
+        fprintf('Chan:\t%s\n', sprintf('%-12s', channels{:}));
+    else
+        fprintf('Chan:\t%s\n', sprintf('%-12s', channels));
+    end
     fprintf('Init:\t%s\n', sprintf('%-12g', values0'));
 end
 
