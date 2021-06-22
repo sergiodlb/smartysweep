@@ -89,7 +89,7 @@ dvr = 0.94;	% large off-balance variation in fraction of output voltage scale
 % deal with ac sources with a minimum finite rms output
 % Vstd_min = 8e-3; % DS345
 
-time_constant_mult  = 10; % how long to wait after changing voltage
+default_tc_mult     = 10; % how long to wait after changing voltage (multiple of time constant)
 default_Vex         = []; % use present value if empty
 default_Vstd_range  = []; % use present value if empty
 default_Vex_scale   = 1; % external gain (>1) or attenuation (<1)
@@ -137,6 +137,7 @@ addParameter(parser, 'balance', default_balance);
 addParameter(parser, 'quiet', default_quiet);
 addParameter(parser, 'plot', default_plotting);
 addParameter(parser, 'return_values', false); % true if called by a measurement script (e.g. to perform rebalanced measurement)
+addParameter(parser, 'tc_mult', default_tc_mult);
 
 parse(parser, varargin{:});
 Vex         = parser.Results.Vex;
@@ -148,6 +149,7 @@ samples     = parser.Results.offbal_samples;
 balance     = parser.Results.balance;
 quiet       = parser.Results.quiet;
 plotting    = parser.Results.plot;
+tc_mult     = parser.Results.tc_mult;
 
 % check for additional arguments needed if returning data values
 return_values = parser.Results.return_values;
@@ -212,7 +214,7 @@ for n = 1:3
     phase = 180 - atan2d(Vrs(n), Vcs(n)); % 4-quadrant tangent function
     smset(config.Vstd_amplitude_channel, R/Vstd_scale);
     smset(config.Vstd_phase_channel, phase);
-    pause(time_constant_mult*time_const);
+    pause(tc_mult*time_const);
     
     for m = 1:samples
 %         while cell2mat(smget('Vd')) > 60e-3 || cell2mat(smget('Vd')) < 50e-3
@@ -287,7 +289,7 @@ end
 
 if balance
     % this settle time allows a proper off-balance voltage measurement (ideally zero) following the balancing process
-    pause(time_constant_mult*time_const);
+    pause(tc_mult*time_const);
     if ~quiet
         if in_range
             fprintf('balanced');
