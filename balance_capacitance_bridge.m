@@ -278,7 +278,7 @@ Vr0Vex = Vr0/Vex;
 % set excitation to balance point
 R = sqrt(Vc0^2 + Vr0^2);
 if R > Vstd_range
-    cprintf('red', 'BALANCE POINT Vstd LARGER THAN AVAILABLE RANGE--- INCREASE RANGE OR DROP Vex\n');
+    warning('Balancing requires Vstd larger than available range --> increase Vstd range or decrease Vex\n');
     in_range = false;
 else
     in_range = true;
@@ -294,7 +294,7 @@ if balance
         if in_range
             fprintf('balanced');
         else
-            cprintf('unbalanced!');
+            warning('unbalanced!');
         end
     end
     error_x = cell2mat(smget(config.channels{Xcol})); % it also allows determination of the error wrt true balance

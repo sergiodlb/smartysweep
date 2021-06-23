@@ -194,7 +194,7 @@ for ii = 1:Npoints
                     try                
                         data_read(sample, col) = cell2mat(smget(config.channels{col}));
                     catch gpiberr
-                        cprintf('red', 'Warning: error reading channel %s\n', config.channels{col});
+                        warning('Error reading channel %s\n', config.channels{col});
                         data_read(sample, col) = nan;
                     end
                 end
@@ -210,7 +210,7 @@ for ii = 1:Npoints
                 try                
                     data_read(1, col) = cell2mat(smget(config.channels{col}));
                 catch gpiberr
-                    cprintf('red', 'Warning: error reading channel %s\n', config.channels{col});
+                    warning('Error reading channel %s\n', config.channels{col});
                     data_read(1, col) = nan;
                 end
             end

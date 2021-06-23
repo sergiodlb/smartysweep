@@ -58,7 +58,7 @@ if abs(Vd_diff)/config.Vd_setpoint > tolerance
 %         pause(0.1);
         fprintf('Vg adjusted to %.4g V,\tamplifier --> %.4g V\n', Vg_new, cell2mat(smget(Vd_channel)));
     else
-        cprintf('red','transistor is deviating from setpoint but extrapolated Vg is outside of specified limits --> %.4g V\n', Vg_new);
+        warning('Transistor is deviating from setpoint but extrapolated Vg is outside of specified limits --> %.4g V\n', Vg_new);
     end
     out = Vg_new;
     

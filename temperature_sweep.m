@@ -150,7 +150,7 @@ try
                 T = cell2mat(smget(config.channels{Tcol}));
                 record = true;
             catch gpiberr
-                cprintf('red', 'Warning 1: error reading channel %s\n', config.channels{Tcol});
+                warning('Error reading channel %s\n', config.channels{Tcol});
                 T = nan;
                 record = false;
             end
@@ -176,7 +176,7 @@ try
                     try                
                         T = cell2mat(smget(config.channels{Tcol}));
                     catch gpiberr
-                        cprintf('red', 'Warning 2: error reading channel %s\n', config.channels{Tcol});
+                        warning('Error reading channel %s\n', config.channels{Tcol});
                         T = nan;
                     end
                 end
@@ -207,7 +207,7 @@ try
                     try                
                         data(ii, col) = cell2mat(smget(config.channels{col}));
                     catch gpiberr
-                        cprintf('red', 'Warning 3: error reading channel %s\n', config.channels{col});
+                        warning('Error reading channel %s\n', config.channels{col});
                         data(ii, col) = nan;
                     end
                 end
